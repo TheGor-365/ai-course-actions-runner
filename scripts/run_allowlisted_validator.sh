@@ -106,6 +106,7 @@ PY
 import csv
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -142,13 +143,7 @@ except Exception as exc:
     print('error_code=' + type(exc).__name__)
     sys.exit(1)
 contract_numbers = a3479.get('contract_numbers', {})
-expected_counts = {
-    'beats': 13,
-    'visual_anchor_targets': 24,
-    'hard_anchors': 15,
-    'soft_anchors': 9,
-    'sfx_targets': 15,
-}
+expected_counts = {'beats': 13, 'visual_anchor_targets': 24, 'hard_anchors': 15, 'soft_anchors': 9, 'sfx_targets': 15}
 observed = {
     'beats': len(a3479.get('beat_targets', [])),
     'visual_anchor_targets': contract_numbers.get('visual_anchor_targets_created'),
@@ -167,39 +162,19 @@ if len(fit_rows) != 13: add_error(f'fit_pack_rows_expected_13_observed_{len(fit_
 if isinstance(fit_items, list) and len(fit_items) != 13: add_error(f'fit_pack_json_items_expected_13_observed_{len(fit_items)}')
 if isinstance(prosody_items, list) and len(prosody_items) != 13: add_error(f'prosody_items_expected_13_observed_{len(prosody_items)}')
 if isinstance(tts_items, list) and len(tts_items) != 13: add_error(f'tts_requirement_items_expected_13_observed_{len(tts_items)}')
-non_claim_flags = {
-    'tts_candidates_rendered': False,
-    'audio_created': False,
-    'audio_production_green': False,
-    'video_allowed': False,
-    'sync_green': False,
-}
+non_claim_flags = {'tts_candidates_rendered': False, 'audio_created': False, 'audio_production_green': False, 'video_allowed': False, 'sync_green': False}
 for obj_name, obj in [('fit_pack', fit_json), ('prosody', prosody), ('tts_requirements', tts_req)]:
     non_claims = obj.get('non_claims', {}) if isinstance(obj, dict) else {}
     for key, expected in non_claim_flags.items():
         if non_claims.get(key) is not expected:
             add_error(f'{obj_name}_non_claim_{key}_not_false')
 report_text = paths['report'].read_text(encoding='utf-8')
-required_report_tokens = [
-    'READ_A3479_TARGET_TIMING_CONTRACT=true',
-    'BEAT_WINDOWS=13',
-    'VISUAL_ANCHOR_TARGETS=24',
-    'HARD_ANCHORS=15',
-    'SOFT_ANCHORS=9',
-    'SFX_TARGETS=15',
-    'RU_SCRIPT_FIT_PACK_CREATED=true',
-    'PROSODY_SOURCE_CONTRACT_CREATED=true',
-    'TTS_CANDIDATE_REQUIREMENTS_CREATED=true',
-    'TTS_CANDIDATES_RENDERED=false',
-    'AUDIO_CREATED=false',
-    'AUDIO_PRODUCTION_GREEN=false',
-    'VIDEO_ALLOWED=false',
-    'SYNC_GREEN=false',
-]
+required_report_tokens = ['READ_A3479_TARGET_TIMING_CONTRACT=true','BEAT_WINDOWS=13','VISUAL_ANCHOR_TARGETS=24','HARD_ANCHORS=15','SOFT_ANCHORS=9','SFX_TARGETS=15','RU_SCRIPT_FIT_PACK_CREATED=true','PROSODY_SOURCE_CONTRACT_CREATED=true','TTS_CANDIDATE_REQUIREMENTS_CREATED=true','TTS_CANDIDATES_RENDERED=false','AUDIO_CREATED=false','AUDIO_PRODUCTION_GREEN=false','VIDEO_ALLOWED=false','SYNC_GREEN=false']
 for token in required_report_tokens:
     if token not in report_text: add_error('report_token_missing_' + hashlib.sha256(token.encode()).hexdigest()[:12])
+private_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 print('gate_id=A3480_SCRIPT_FIT_PACK_LOCAL_GATE')
-print('private_sha=' + (ROOT / '.git').exists().__str__().lower())
+print('private_sha=' + private_sha)
 print('files_exist=true')
 print('beat_count=' + str(observed['beats']))
 print('visual_anchor_targets=' + str(observed['visual_anchor_targets']))
