@@ -63,7 +63,7 @@ jobs:
       - name: Pending status
         run: |
           set -euo pipefail
-          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Public runner smoke started" "$PUBLIC_RUN_URL"
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Public runner smoke started" "$PUBLIC_RUN_URL"
 
       - name: Clone exact private SHA without printing content
         run: |
@@ -88,10 +88,10 @@ jobs:
         if: ${{ success() }}
         run: |
           set -euo pipefail
-          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" success "Public runner smoke passed" "$PUBLIC_RUN_URL"
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" success "Public runner smoke passed" "$PUBLIC_RUN_URL"
 
       - name: Error status
         if: ${{ failure() }}
         run: |
           set -euo pipefail
-          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" error "Public runner smoke failed" "$PUBLIC_RUN_URL"
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" error "Public runner smoke failed" "$PUBLIC_RUN_URL"
