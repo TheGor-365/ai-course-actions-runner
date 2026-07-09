@@ -29,6 +29,7 @@ on:
           - A3479_CONTENT_ONLY_LOCAL_GATE
           - A3479_CI_SCOPE_GUARD_DOC_GATE
           - M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET
+          - A3480_SCRIPT_FIT_PACK_LOCAL_GATE
       status_context:
         description: Commit status context
         required: true
@@ -90,7 +91,7 @@ jobs:
             *) echo "policy_error=repo_not_allowlisted"; exit 2 ;;
           esac
           case "$GATE_ID" in
-            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET) ;;
+            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET|A3480_SCRIPT_FIT_PACK_LOCAL_GATE) ;;
             *) echo "policy_error=gate_not_allowlisted"; exit 2 ;;
           esac
           if [[ ! "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
