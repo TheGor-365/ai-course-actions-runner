@@ -1,0 +1,97 @@
+name: Run Private Status Writeback Smoke
+
+run-name: private-smoke @ ${{ inputs.private_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      private_repo:
+        description: Private repo to smoke-test
+        required: true
+        type: choice
+        options:
+          - TheGor-365/ai-course-production-system
+          - TheGor-365/ai-course-source-library
+      private_branch:
+        description: Private branch name; must resolve to private_sha
+        required: true
+        type: string
+      private_sha:
+        description: Exact private commit SHA to smoke-test
+        required: true
+        type: string
+      status_context:
+        description: Commit status context
+        required: true
+        type: string
+        default: public-runner/factory/smoke
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRIVATE_REPO: ${{ inputs.private_repo }}
+      PRIVATE_BRANCH: ${{ inputs.private_branch }}
+      PRIVATE_SHA: ${{ inputs.private_sha }}
+      STATUS_CONTEXT: ${{ inputs.status_context }}
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard
+        run: |
+          set -euo pipefail
+          test -n "${PRIVATE_REPO_PAT:-}"
+          case "$PRIVATE_REPO" in
+            TheGor-365/ai-course-production-system|TheGor-365/ai-course-source-library) ;;
+            *) echo "policy_error=repo_not_allowlisted"; exit 2 ;;
+          esac
+          [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "policy_guard=pass"
+          echo "artifact_policy=none"
+          echo "private_content_printed=false"
+
+      - name: Pending status
+        run: |
+          set -euo pipefail
+          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Public runner smoke started" "$PUBLIC_RUN_URL"
+
+      - name: Clone exact private SHA without printing content
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$D" >/dev/null 2>&1
+          cd "$D"
+          git fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          B="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          if [[ "$B" != "$PRIVATE_SHA" ]]; then
+            echo "error_class=branch_head_sha_mismatch"
+            exit 2
+          fi
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          C="$(find . -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+          echo "clone_result=PASS"
+          echo "private_branch_head_verified=true"
+          echo "top_level_path_count=$C"
+          echo "private_content_printed=false"
+
+      - name: Success status
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" success "Public runner smoke passed" "$PUBLIC_RUN_URL"
+
+      - name: Error status
+        if: ${{ failure() }}
+        run: |
+          set -euo pipefail
+          scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" error "Public runner smoke failed" "$PUBLIC_RUN_URL"
