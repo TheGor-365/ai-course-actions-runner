@@ -113,7 +113,7 @@ jobs:
         if: ${{ inputs.write_status }}
         run: |
           set -euo pipefail
-          scripts/write_private_commit_status.sh \
+          bash scripts/write_private_commit_status.sh \
             "$PRIVATE_REPO" \
             "$PRIVATE_SHA" \
             "$STATUS_CONTEXT" \
@@ -150,7 +150,7 @@ jobs:
         run: |
           set +e
           SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
-          scripts/run_allowlisted_validator.sh "$GATE_ID" "${{ steps.checkout_private.outputs.private_checkout_dir }}" > "$SUMMARY_FILE" 2>&1
+          bash scripts/run_allowlisted_validator.sh "$GATE_ID" "${{ steps.checkout_private.outputs.private_checkout_dir }}" > "$SUMMARY_FILE" 2>&1
           RC=$?
           cat "$SUMMARY_FILE"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
@@ -207,7 +207,7 @@ jobs:
             STATE="error"
             DESCRIPTION="Public runner infrastructure or policy error"
           fi
-          scripts/write_private_commit_status.sh \
+          bash scripts/write_private_commit_status.sh \
             "$PRIVATE_REPO" \
             "$PRIVATE_SHA" \
             "$STATUS_CONTEXT" \
@@ -219,7 +219,7 @@ jobs:
         if: ${{ always() && inputs.write_pr_comment && inputs.private_pr != '' }}
         run: |
           set -euo pipefail
-          scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$comment_file"
+          bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$comment_file"
 
       - name: Final gate result
         if: ${{ always() }}
