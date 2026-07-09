@@ -1,0 +1,239 @@
+name: Run Private Validator
+
+run-name: private-validator ${{ inputs.gate_id }} @ ${{ inputs.private_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      private_repo:
+        description: Private repo to validate
+        required: true
+        type: choice
+        options:
+          - TheGor-365/ai-course-production-system
+          - TheGor-365/ai-course-source-library
+      private_branch:
+        description: Private branch name; must resolve to private_sha
+        required: true
+        type: string
+      private_sha:
+        description: Exact private commit SHA to validate
+        required: true
+        type: string
+      gate_id:
+        description: Allowlisted gate id
+        required: true
+        type: choice
+        options:
+          - FACTORY_PUBLIC_RUNNER_SMOKE
+          - A3479_CONTENT_ONLY_LOCAL_GATE
+          - A3479_CI_SCOPE_GUARD_DOC_GATE
+          - M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET
+      status_context:
+        description: Commit status context
+        required: true
+        type: string
+        default: public-runner/factory/smoke
+      write_status:
+        description: Write private commit status
+        required: true
+        type: boolean
+        default: true
+      write_pr_comment:
+        description: Write compact private PR comment
+        required: true
+        type: boolean
+        default: false
+      private_pr:
+        description: Private PR number for comment writeback; blank disables comment
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-private-sha:
+    name: Validate private SHA with allowlisted gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRIVATE_REPO: ${{ inputs.private_repo }}
+      PRIVATE_BRANCH: ${{ inputs.private_branch }}
+      PRIVATE_SHA: ${{ inputs.private_sha }}
+      GATE_ID: ${{ inputs.gate_id }}
+      STATUS_CONTEXT: ${{ inputs.status_context }}
+      WRITE_STATUS: ${{ inputs.write_status }}
+      WRITE_PR_COMMENT: ${{ inputs.write_pr_comment }}
+      PRIVATE_PR: ${{ inputs.private_pr }}
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Checkout public runner repo
+        uses: actions/checkout@v4
+
+      - name: Policy guard
+        run: |
+          set -euo pipefail
+          if [[ -z "${PRIVATE_REPO_PAT:-}" ]]; then
+            echo "policy_error=missing_private_repo_credential"
+            exit 2
+          fi
+          case "$PRIVATE_REPO" in
+            TheGor-365/ai-course-production-system|TheGor-365/ai-course-source-library) ;;
+            *) echo "policy_error=repo_not_allowlisted"; exit 2 ;;
+          esac
+          case "$GATE_ID" in
+            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET) ;;
+            *) echo "policy_error=gate_not_allowlisted"; exit 2 ;;
+          esac
+          if [[ ! "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "policy_error=private_sha_must_be_full_40_hex"
+            exit 2
+          fi
+          if [[ "$PRIVATE_BRANCH" == *..* || "$PRIVATE_BRANCH" == /* || "$PRIVATE_BRANCH" == *' '* ]]; then
+            echo "policy_error=unsafe_branch_name"
+            exit 2
+          fi
+          echo "policy_guard=pass"
+          echo "private_repo=$PRIVATE_REPO"
+          echo "private_branch=$PRIVATE_BRANCH"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "gate_id=$GATE_ID"
+          echo "artifact_policy=none"
+          echo "private_content_printed=false"
+
+      - name: Write pending status
+        if: ${{ inputs.write_status }}
+        run: |
+          set -euo pipefail
+          scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" \
+            "$PRIVATE_SHA" \
+            "$STATUS_CONTEXT" \
+            pending \
+            "Public runner validation started" \
+            "$PUBLIC_RUN_URL"
+
+      - name: Clone and checkout exact private SHA
+        id: checkout_private
+        run: |
+          set -euo pipefail
+          PRIVATE_CHECKOUT_DIR="$RUNNER_TEMP/private_repo"
+          rm -rf "$PRIVATE_CHECKOUT_DIR"
+          git config --global advice.detachedHead false
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$PRIVATE_CHECKOUT_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_CHECKOUT_DIR"
+          git fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          BRANCH_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          if [[ "$BRANCH_SHA" != "$PRIVATE_SHA" ]]; then
+            echo "checkout_error=branch_head_sha_mismatch"
+            echo "expected_private_sha=$PRIVATE_SHA"
+            echo "observed_branch_sha=$BRANCH_SHA"
+            exit 2
+          fi
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_checkout_dir=$PRIVATE_CHECKOUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "checkout_private_sha=$PRIVATE_SHA"
+          echo "private_branch_head_verified=true"
+          echo "private_content_printed=false"
+
+      - name: Run allowlisted gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
+          scripts/run_allowlisted_validator.sh "$GATE_ID" "${{ steps.checkout_private.outputs.private_checkout_dir }}" > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Build compact comment
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          if [[ -z "$RESULT" ]]; then RESULT="ERROR"; fi
+          if [[ -z "$EXIT_CODE" ]]; then EXIT_CODE="2"; fi
+          COMMENT_FILE="$RUNNER_TEMP/public_runner_comment.md"
+          {
+            echo "## Public Runner Center result"
+            echo
+            echo '```text'
+            echo "PUBLIC_RUNNER_VALIDATED=$([[ "$RESULT" == "PASS" ]] && echo true || echo false)"
+            echo "PUBLIC_RUNNER_REPO=${{ github.repository }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "GATE_ID=$GATE_ID"
+            echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "RESULT=$RESULT"
+            echo "EXIT_CODE=$EXIT_CODE"
+            echo "PRIVATE_ACTIONS_GREEN=false"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$COMMENT_FILE"
+          echo "comment_file=$COMMENT_FILE" >> "$GITHUB_ENV"
+
+      - name: Write final status
+        if: ${{ always() && inputs.write_status }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then
+            STATE="success"
+            DESCRIPTION="Allowlisted public runner gate passed"
+          elif [[ -n "$EXIT_CODE" ]]; then
+            STATE="failure"
+            DESCRIPTION="Allowlisted public runner gate failed"
+          else
+            STATE="error"
+            DESCRIPTION="Public runner infrastructure or policy error"
+          fi
+          scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" \
+            "$PRIVATE_SHA" \
+            "$STATUS_CONTEXT" \
+            "$STATE" \
+            "$DESCRIPTION" \
+            "$PUBLIC_RUN_URL"
+
+      - name: Write compact PR comment
+        if: ${{ always() && inputs.write_pr_comment && inputs.private_pr != '' }}
+        run: |
+          set -euo pipefail
+          scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$comment_file"
+
+      - name: Final gate result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          RESULT="${{ steps.gate.outputs.result }}"
+          echo "public_runner_repo=${{ github.repository }}"
+          echo "public_run_id=${{ github.run_id }}"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "gate_id=$GATE_ID"
+          echo "result=$RESULT"
+          echo "private_content_printed=false"
+          echo "artifact_policy=none"
+          if [[ "$RESULT" != "PASS" || "$EXIT_CODE" != "0" ]]; then
+            exit 1
+          fi
