@@ -47,7 +47,7 @@ jobs:
             "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${{ steps.request.outputs.repo }}.git" \
             "$DIR" >/dev/null 2>&1
           cd "$DIR"
-          git fetch --depth=1 origin \
+          git fetch --depth=2 origin \
             "refs/heads/${{ steps.request.outputs.branch }}:refs/remotes/origin/${{ steps.request.outputs.branch }}" \
             >/dev/null 2>&1
           OBSERVED="$(git rev-parse "refs/remotes/origin/${{ steps.request.outputs.branch }}")"
