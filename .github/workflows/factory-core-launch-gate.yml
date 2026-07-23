@@ -8,6 +8,11 @@ on:
       - "requests/factory_core_launch_request_v01.json"
       - "scripts/run_factory_core_launch_gate.sh"
       - ".github/workflows/factory-core-launch-gate.yml"
+  pull_request:
+    paths:
+      - "requests/factory_core_launch_request_v01.json"
+      - "scripts/run_factory_core_launch_gate.sh"
+      - ".github/workflows/factory-core-launch-gate.yml"
   workflow_dispatch:
 
 permissions:
