@@ -1,0 +1,93 @@
+name: Factory Core Launch Diagnostics
+
+on:
+  pull_request:
+    paths:
+      - "requests/factory_core_launch_request_v01.json"
+      - "scripts/run_factory_core_launch_gate.sh"
+      - ".github/workflows/factory-core-launch-gate.yml"
+      - ".github/workflows/factory-core-launch-diagnostics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: diagnose-${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [compile, day1, day2, hygiene]
+    env:
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load request
+        id: request
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('requests/factory_core_launch_request_v01.json').read_text(encoding='utf-8'))
+          print('repo=' + payload['private_repo'])
+          print('branch=' + payload['private_branch'])
+          print('sha=' + payload['private_sha'])
+          PY
+
+      - name: Clone exact private SHA
+        run: |
+          set -euo pipefail
+          DIR="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${{ steps.request.outputs.repo }}.git" \
+            "$DIR" >/dev/null 2>&1
+          cd "$DIR"
+          git fetch --depth=1 origin \
+            "refs/heads/${{ steps.request.outputs.branch }}:refs/remotes/origin/${{ steps.request.outputs.branch }}" \
+            >/dev/null 2>&1
+          OBSERVED="$(git rev-parse "refs/remotes/origin/${{ steps.request.outputs.branch }}")"
+          [[ "$OBSERVED" == "${{ steps.request.outputs.sha }}" ]]
+          git checkout --detach "${{ steps.request.outputs.sha }}" >/dev/null 2>&1
+
+      - name: Run fixed diagnostic
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/private_repo"
+          case "${{ matrix.check }}" in
+            compile)
+              python3 -m py_compile \
+                11_tools/factory_core/__init__.py \
+                11_tools/factory_core/core.py \
+                11_tools/factory_core/station_outputs.py \
+                11_tools/run_factory_core.py \
+                11_tools/test_factory_core.py \
+                11_tools/test_factory_core_day2.py \
+                >/dev/null 2>&1
+              ;;
+            day1)
+              python3 11_tools/test_factory_core.py >/dev/null 2>&1
+              ;;
+            day2)
+              python3 11_tools/test_factory_core_day2.py >/dev/null 2>&1
+              ;;
+            hygiene)
+              if find 04_validators/test_fixtures/factory_core \
+                      05_orchestration/launch_5d/core_contracts \
+                      11_tools/factory_core \
+                      -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
+                      | grep -q .; then
+                exit 1
+              fi
+              git show --check --oneline --no-renames HEAD >/dev/null 2>&1
+              ;;
+            *) exit 2 ;;
+          esac
+          echo "diagnostic=${{ matrix.check }}"
+          echo "result=PASS"
+          echo "private_content_printed=false"
+          echo "artifact_policy=none"
