@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [compile, day1, day2, hygiene]
+        check: [compile, day1, day2, binary, diff]
     env:
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
     steps:
@@ -75,7 +75,7 @@ jobs:
             day2)
               python3 11_tools/test_factory_core_day2.py >/dev/null 2>&1
               ;;
-            hygiene)
+            binary)
               if find 04_validators/test_fixtures/factory_core \
                       05_orchestration/launch_5d/core_contracts \
                       11_tools/factory_core \
@@ -83,6 +83,8 @@ jobs:
                       | grep -q .; then
                 exit 1
               fi
+              ;;
+            diff)
               git show --check --oneline --no-renames HEAD >/dev/null 2>&1
               ;;
             *) exit 2 ;;
