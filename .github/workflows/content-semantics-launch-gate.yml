@@ -1,0 +1,188 @@
+name: Content Semantics Launch Gate
+
+on:
+  push:
+    branches:
+      - launch/factory-5d-runner-infrastructure
+    paths:
+      - "requests/content_semantics_launch_request_v01.json"
+      - "scripts/run_content_semantics_launch_gate.sh"
+      - ".github/workflows/content-semantics-launch-gate.yml"
+  pull_request:
+    paths:
+      - "requests/content_semantics_launch_request_v01.json"
+      - "scripts/run_content_semantics_launch_gate.sh"
+      - ".github/workflows/content-semantics-launch-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-exact-private-content-sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REQUEST_FILE: requests/content_semantics_launch_request_v01.json
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout public runner
+        uses: actions/checkout@v4
+
+      - name: Load and validate fixed request
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ['REQUEST_FILE']).read_text(encoding='utf-8'))
+          expected = {
+              'schema_version': 'PublicRunnerContentSemanticsRequest_v1',
+              'private_repo': 'TheGor-365/ai-course-source-library',
+              'private_branch': 'launch/factory-5d-content-semantics',
+              'private_pr': 55,
+              'gate_id': 'CONTENT_SEMANTICS_LAUNCH_GATE',
+              'status_context': 'public-runner/content-semantics/launch',
+              'artifact_policy': 'none',
+              'private_content_public_exposure': False,
+              'no_fake_green': True,
+          }
+          for key, value in expected.items():
+              if payload.get(key) != value:
+                  raise SystemExit(f'policy_error=request_field_mismatch_{key}')
+          private_sha = payload.get('private_sha', '')
+          if not re.fullmatch(r'[0-9a-f]{40}', private_sha):
+              raise SystemExit('policy_error=private_sha_must_be_full_40_hex')
+          if not os.environ.get('PRIVATE_REPO_PAT'):
+              raise SystemExit('policy_error=missing_private_repo_credential')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              for key in ('private_repo', 'private_branch', 'private_sha', 'private_pr', 'gate_id', 'status_context'):
+                  handle.write(f'{key.upper()}={payload[key]}\n')
+          print('request_policy=PASS')
+          print('artifact_policy=none')
+          print('private_content_printed=false')
+          PY
+
+      - name: Write pending private status
+        run: |
+          set -euo pipefail
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending \
+            "Public runner content semantics gate started" "$PUBLIC_RUN_URL"
+
+      - name: Clone and verify exact private branch head
+        id: private_checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_DIR="$RUNNER_TEMP/private_repo"
+          git config --global advice.detachedHead false
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_DIR"
+          git fetch --depth=2 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          OBSERVED_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || {
+            echo "checkout_error=branch_head_sha_mismatch"
+            exit 2
+          }
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_dir=$PRIVATE_DIR" >> "$GITHUB_OUTPUT"
+          echo "private_branch_head_verified=true"
+          echo "private_content_printed=false"
+
+      - name: Run sanitized fixed gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/content_semantics_gate_summary.txt"
+          bash scripts/run_content_semantics_launch_gate.sh \
+            "${{ steps.private_checkout.outputs.private_dir }}" \
+            > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then
+            STATE=success
+            DESCRIPTION="Public runner content semantics gate passed"
+          elif [[ -n "$EXIT_CODE" ]]; then
+            STATE=failure
+            DESCRIPTION="Public runner content semantics gate failed"
+          else
+            STATE=error
+            DESCRIPTION="Public runner content semantics infrastructure error"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+
+      - name: Write compact private PR comment
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          [[ -n "$RESULT" ]] || RESULT=ERROR
+          [[ -n "$EXIT_CODE" ]] || EXIT_CODE=2
+          COMMENT_FILE="$RUNNER_TEMP/content_semantics_comment.md"
+          {
+            echo '## Public runner — Content Semantics Launch Gate'
+            echo
+            echo '```text'
+            echo "PUBLIC_RUNNER_VALIDATED=$([[ "$RESULT" == PASS ]] && echo true || echo false)"
+            echo "PUBLIC_RUNNER_REPO=${{ github.repository }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "GATE_ID=$GATE_ID"
+            echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "RESULT=$RESULT"
+            echo "EXIT_CODE=$EXIT_CODE"
+            echo 'PRIVATE_ACTIONS_GREEN=false'
+            echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
+            echo 'ARTIFACT_POLICY=none'
+            echo 'PRODUCTION_GREEN_CLAIMED=false'
+            echo 'NO_FAKE_GREEN=true'
+            echo '```'
+          } > "$COMMENT_FILE"
+          bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$COMMENT_FILE"
+
+      - name: Final result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          echo "public_runner_repo=${{ github.repository }}"
+          echo "public_run_id=${{ github.run_id }}"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "gate_id=$GATE_ID"
+          echo "result=$RESULT"
+          echo "artifact_policy=none"
+          echo "private_content_printed=false"
+          [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]
