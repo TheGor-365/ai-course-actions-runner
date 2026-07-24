@@ -112,7 +112,13 @@ jobs:
             > "$SUMMARY_FILE" 2>&1
           RC=$?
           cat "$SUMMARY_FILE"
+          ERROR_CLASS="$(sed -n 's/^error_class=//p' "$SUMMARY_FILE" | tail -n 1)"
+          ERROR_CODE="$(sed -n 's/^error_code=//p' "$SUMMARY_FILE" | tail -n 1)"
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=none
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=none
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "error_class=$ERROR_CLASS" >> "$GITHUB_OUTPUT"
+          echo "error_code=$ERROR_CODE" >> "$GITHUB_OUTPUT"
           if [[ "$RC" -eq 0 ]]; then
             echo "result=PASS" >> "$GITHUB_OUTPUT"
           else
@@ -126,12 +132,13 @@ jobs:
           set -euo pipefail
           RESULT="${{ steps.gate.outputs.result }}"
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
           if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then
             STATE=success
             DESCRIPTION="Public runner content semantics gate passed"
           elif [[ -n "$EXIT_CODE" ]]; then
             STATE=failure
-            DESCRIPTION="Public runner content semantics gate failed"
+            DESCRIPTION="Content semantics gate failed: ${ERROR_CODE:-unknown}"
           else
             STATE=error
             DESCRIPTION="Public runner content semantics infrastructure error"
@@ -146,8 +153,12 @@ jobs:
           set -euo pipefail
           RESULT="${{ steps.gate.outputs.result }}"
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
           [[ -n "$RESULT" ]] || RESULT=ERROR
           [[ -n "$EXIT_CODE" ]] || EXIT_CODE=2
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=workflow
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=unclassified
           COMMENT_FILE="$RUNNER_TEMP/content_semantics_comment.md"
           {
             echo '## Public runner — Content Semantics Launch Gate'
@@ -163,6 +174,8 @@ jobs:
             echo "STATUS_CONTEXT=$STATUS_CONTEXT"
             echo "RESULT=$RESULT"
             echo "EXIT_CODE=$EXIT_CODE"
+            echo "ERROR_CLASS=$ERROR_CLASS"
+            echo "ERROR_CODE=$ERROR_CODE"
             echo 'PRIVATE_ACTIONS_GREEN=false'
             echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
             echo 'ARTIFACT_POLICY=none'
@@ -178,11 +191,15 @@ jobs:
           set -euo pipefail
           RESULT="${{ steps.gate.outputs.result }}"
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
           echo "public_runner_repo=${{ github.repository }}"
           echo "public_run_id=${{ github.run_id }}"
           echo "private_sha=$PRIVATE_SHA"
           echo "gate_id=$GATE_ID"
           echo "result=$RESULT"
+          echo "error_class=${ERROR_CLASS:-none}"
+          echo "error_code=${ERROR_CODE:-none}"
           echo "artifact_policy=none"
           echo "private_content_printed=false"
           [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]
