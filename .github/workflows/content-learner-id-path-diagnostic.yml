@@ -1,0 +1,94 @@
+name: Content Learner ID Path Diagnostic
+
+on:
+  push:
+    branches:
+      - launch/factory-5d-runner-infrastructure
+    paths:
+      - "scripts/diagnose_content_learner_id_leak.sh"
+      - ".github/workflows/content-learner-id-path-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish-sanitized-field-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PRIVATE_REPO: TheGor-365/ai-course-source-library
+      PRIVATE_BRANCH: launch/factory-5d-content-semantics-snapshot-v2
+      PRIVATE_SHA: 21b8b465fad2d46a7c45ba8a96b03606140cabd6
+      STATUS_CONTEXT: public-runner/content-semantics/snapshot-v2/field-diagnostic
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout public runner
+        uses: actions/checkout@v4
+
+      - name: Clone exact source snapshot
+        id: checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_DIR="$RUNNER_TEMP/source_snapshot_v2"
+          git config --global advice.detachedHead false
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_DIR" >/dev/null 2>&1
+          git -C "$PRIVATE_DIR" fetch --depth=2 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          [[ "$(git -C "$PRIVATE_DIR" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")" == "$PRIVATE_SHA" ]]
+          git -C "$PRIVATE_DIR" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_dir=$PRIVATE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Diagnose sanitized field path
+        id: diagnostic
+        run: |
+          set +e
+          SUMMARY="$RUNNER_TEMP/learner_id_path.txt"
+          bash scripts/diagnose_content_learner_id_leak.sh \
+            "${{ steps.checkout.outputs.private_dir }}" \
+            >"$SUMMARY" 2>&1
+          RC=$?
+          ERROR_CLASS="$(sed -n 's/^error_class=//p' "$SUMMARY" | tail -n 1)"
+          ERROR_CODE="$(sed -n 's/^error_code=//p' "$SUMMARY" | tail -n 1)"
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=none
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=none
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "error_class=$ERROR_CLASS" >> "$GITHUB_OUTPUT"
+          echo "error_code=$ERROR_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Publish field diagnostic status
+        run: |
+          set -euo pipefail
+          RC="${{ steps.diagnostic.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.diagnostic.outputs.error_class }}"
+          ERROR_CODE="${{ steps.diagnostic.outputs.error_code }}"
+          SAFE="$(printf '%s-%s' "$ERROR_CLASS" "$ERROR_CODE" | tr -cd 'a-zA-Z0-9._-')"
+          CONTEXT="${STATUS_CONTEXT}/${SAFE}"
+          if [[ "$RC" == 0 ]]; then
+            STATE=success
+            DESCRIPTION='Learner ID path diagnostic: no leak'
+          else
+            STATE=failure
+            DESCRIPTION="Learner ID path diagnostic: ${SAFE}"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+          echo "diagnostic_context=$CONTEXT"
+          echo 'learner_text_value_printed=false'
+          echo 'private_content_printed=false'
+          echo 'artifact_policy=none'
+
+      - name: Final diagnostic result
+        run: |
+          set -euo pipefail
+          [[ "${{ steps.diagnostic.outputs.exit_code }}" == 0 ]]
