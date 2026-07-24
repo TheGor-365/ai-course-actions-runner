@@ -165,6 +165,7 @@ def execute(args)->int:
         backup,restore=backup_dir/name,restore_dir/name; shutil.copy2(art,backup); shutil.copy2(backup,restore); state["backup_restore_count"]+=1
         hashes=[hashlib.sha256(x.read_bytes()).hexdigest() for x in (art,backup,restore)]
         if len(set(hashes))!=1: raise ContractError("artifact_hash_mismatch")
+        restore.unlink(); restore_dir.rmdir()
         state["artifact_record"]={"artifact_id":"fixture-"+digest[:24],"package_request_id":req["package_request_id"],"station_id":req["station_id"],"artifact_type":"fixture_text","sha256":hashes[0],"size_bytes":art.stat().st_size,"codec_or_format":"text/plain; charset=utf-8","duration_ms_optional":None,"private_storage_pointer":f"private-artifact://fixture/{name}","producer_version":"private-executor-fixture-v1","created_at":now(),"backup_pointer_optional":f"private-backup://fixture/{name}","restore_status":"PASS","QC_identity_optional":"sha256_restore_identity_v1"}
         state["completed"]=True; write_json(state_path,state)
     receipt=base(); receipt["output_artifacts"]=[state["artifact_record"]]; receipt["resume_token_optional"]=state.get("resume_token")
