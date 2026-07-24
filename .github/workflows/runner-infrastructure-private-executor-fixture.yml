@@ -1,0 +1,59 @@
+name: Runner Infrastructure Private Executor Fixture
+
+on:
+  push:
+    branches:
+      - launch/factory-5d-runner-infrastructure
+    paths:
+      - "contracts/private_executor_v1.schema.json"
+      - "contracts/artifact_pointer_v1.schema.json"
+      - "scripts/private_executor_fixture.py"
+      - "tests/test_private_executor_fixture.py"
+      - ".github/workflows/runner-infrastructure-private-executor-fixture.yml"
+  pull_request:
+    paths:
+      - "contracts/private_executor_v1.schema.json"
+      - "contracts/artifact_pointer_v1.schema.json"
+      - "scripts/private_executor_fixture.py"
+      - "tests/test_private_executor_fixture.py"
+      - ".github/workflows/runner-infrastructure-private-executor-fixture.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  private-executor-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax and fixture tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/private_executor_fixture.py tests/test_private_executor_fixture.py
+          python3 -m unittest -v tests/test_private_executor_fixture.py
+      - name: Policy negatives
+        run: |
+          set -euo pipefail
+          ! grep -R -E '(ghp_|github_pat_|sk-[A-Za-z0-9]|/home/gor/)' \
+            contracts/private_executor_v1.schema.json \
+            contracts/artifact_pointer_v1.schema.json \
+            scripts/private_executor_fixture.py \
+            tests/test_private_executor_fixture.py
+          ! find . -type f \( -name '*.mp4' -o -name '*.wav' -o -name '*.mp3' -o -name '*.mov' \) -print -quit | grep -q .
+      - name: Sanitized result
+        run: |
+          echo 'private_executor_interface_v1=PASS'
+          echo 'retry_resume_fixture=PASS'
+          echo 'backup_restore_sha_fixture=PASS'
+          echo 'public_media_artifacts_created=false'
+          echo 'private_content_public_exposure=false'
+          echo 'production_green_claimed=false'
