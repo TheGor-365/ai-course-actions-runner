@@ -51,3 +51,79 @@ jobs:
           PY
           echo "public_artifacts_created=false"
           echo "private_content_public_exposure=false"
+
+  exact-private-sha-control-plane-smoke:
+    if: ${{ github.event_name == 'push' }}
+    needs: changed-path-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: launch-runner-control-plane-evidence
+      PRIVATE_SHA: 07f5b2b525b0fb4a2e94aa10b5176386001b63e4
+      GATE_ID: FACTORY_LAUNCH_CONTROL_PLANE_GATE
+      STATUS_CONTEXT: public-runner/launch-5d/runner-infrastructure-day1
+      REQUEST_ID: runner-infrastructure-day1-bootstrap-001
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap policy guard
+        run: |
+          set -euo pipefail
+          [[ -n "${PRIVATE_REPO_PAT:-}" ]] || { echo "policy_error=missing_private_repo_credential"; exit 2; }
+          [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "policy_error=invalid_private_sha"; exit 2; }
+          python3 scripts/runner_infrastructure_v1.py resolve-gate "$GATE_ID" "$PRIVATE_REPO" --field profile_id >/dev/null
+          echo "policy_guard=pass"
+          echo "request_id=$REQUEST_ID"
+          echo "private_content_public_exposure=false"
+          echo "artifacts_created=false"
+      - name: Write pending private status
+        run: |
+          set -euo pipefail
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Runner infrastructure exact-SHA smoke started" "$PUBLIC_RUN_URL"
+      - name: Checkout exact private SHA
+        id: private_checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_CHECKOUT_DIR="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$PRIVATE_CHECKOUT_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_CHECKOUT_DIR"
+          git fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          OBSERVED_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || { echo "checkout_error=branch_head_sha_mismatch"; exit 2; }
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_checkout_dir=$PRIVATE_CHECKOUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "private_branch_head_verified=true"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "private_content_public_exposure=false"
+      - name: Run exact-SHA control-plane gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
+          bash scripts/run_manifest_gate.sh "$GATE_ID" "${{ steps.private_checkout.outputs.private_checkout_dir }}" "$PRIVATE_REPO" > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then STATE=success; DESCRIPTION="Runner infrastructure exact-SHA smoke passed"; else STATE=failure; DESCRIPTION="Runner infrastructure exact-SHA smoke failed"; fi
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" "$DESCRIPTION" "$PUBLIC_RUN_URL"
+      - name: Final exact-SHA assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
+          echo "exact_private_sha_binding=PASS"
+          echo "private_commit_status_writeback=PASS"
+          echo "public_media_artifacts_created=false"
+          echo "private_content_public_exposure=false"
