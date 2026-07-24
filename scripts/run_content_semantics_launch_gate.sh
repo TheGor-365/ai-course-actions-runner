@@ -56,7 +56,9 @@ trap 'rm -rf "$OUT"' EXIT
 python3 -m py_compile \
   "$ROOT/build_content_semantics.py" \
   "$ROOT/validate_content_semantics.py" \
+  "$ROOT/validate_policy_bindings.py" \
   "$ROOT/validate_factory_request_bridge.py" \
+  "$ROOT/validate_audio_authority_mapping.py" \
   >/dev/null 2>&1 || fail validator python_compile_failed
 
 python3 "$ROOT/build_content_semantics.py" \
@@ -68,6 +70,17 @@ cmp \
   "$ROOT/M1-L01-S02_immutable_blind_request_v1.json" \
   "$OUT/M1-L01-S02_immutable_blind_request_v1.json" \
   >/dev/null 2>&1 || fail validator legacy_request_reproducibility_failed
+
+python3 "$ROOT/validate_policy_bindings.py" \
+  --repo-root . \
+  --request "$ROOT/M1-L01-S02_immutable_blind_request_v1.json" \
+  >/dev/null 2>&1 || fail validator policy_bindings_failed
+
+python3 "$ROOT/validate_audio_authority_mapping.py" \
+  --mapping "$ROOT/S01_audio_authority_mapping_v1.json" \
+  --attestation "$ROOT/audio_authority_connector_attestation_v1.json" \
+  --self-test \
+  >/dev/null 2>&1 || fail validator audio_authority_mapping_failed
 
 VALIDATOR_LOG="$OUT/content_semantics_validator.log"
 if ! python3 "$ROOT/validate_content_semantics.py" \
@@ -117,7 +130,9 @@ git show --check --oneline --no-renames HEAD >/dev/null 2>&1 \
 
 BUILDER_HASH="$(sha256sum "$ROOT/build_content_semantics.py" | awk '{print $1}')"
 VALIDATOR_HASH="$(sha256sum "$ROOT/validate_content_semantics.py" | awk '{print $1}')"
+POLICY_HASH="$(sha256sum "$ROOT/validate_policy_bindings.py" | awk '{print $1}')"
 BRIDGE_HASH="$(sha256sum "$ROOT/validate_factory_request_bridge.py" | awk '{print $1}')"
+AUDIO_MAPPING_HASH="$(sha256sum "$ROOT/validate_audio_authority_mapping.py" | awk '{print $1}')"
 FACTORY_REQUEST_HASH="$(sha256sum "$ROOT/M1-L01-S02_factory_request_v1.json" | awk '{print $1}')"
 
 cat <<EOF
@@ -126,6 +141,8 @@ private_sha=$PRIVATE_SHA
 python_compile=PASS
 deterministic_build=PASS
 legacy_request_reproducibility=PASS
+policy_bindings=PASS
+audio_authority_mapping=PASS
 content_semantics_validator=PASS
 factory_request_bridge=PASS
 factory_request_negative_self_tests=PASS
@@ -139,7 +156,9 @@ binary_media_in_content_semantics_paths=false
 diff_hygiene=PASS
 sha256_builder=$BUILDER_HASH
 sha256_content_validator=$VALIDATOR_HASH
+sha256_policy_validator=$POLICY_HASH
 sha256_factory_request_bridge=$BRIDGE_HASH
+sha256_audio_authority_validator=$AUDIO_MAPPING_HASH
 sha256_factory_request_file=$FACTORY_REQUEST_HASH
 private_content_printed=false
 artifact_policy=none
