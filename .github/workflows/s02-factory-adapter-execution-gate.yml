@@ -1,0 +1,236 @@
+name: S02 Factory Adapter Execution Gate
+
+on:
+  push:
+    branches:
+      - launch/factory-5d-runner-infrastructure
+    paths:
+      - "requests/s02_factory_adapter_execution_request_v01.json"
+      - "scripts/run_s02_factory_adapter_execution_gate.sh"
+      - ".github/workflows/s02-factory-adapter-execution-gate.yml"
+  pull_request:
+    paths:
+      - "requests/s02_factory_adapter_execution_request_v01.json"
+      - "scripts/run_s02_factory_adapter_execution_gate.sh"
+      - ".github/workflows/s02-factory-adapter-execution-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  execute-exact-policy-bound-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      REQUEST_FILE: requests/s02_factory_adapter_execution_request_v01.json
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout public runner
+        uses: actions/checkout@v4
+
+      - name: Load fixed cross-repo request
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ['REQUEST_FILE']).read_text(encoding='utf-8'))
+          expected = {
+              'schema_version': 'PublicRunnerS02FactoryAdapterExecutionRequest_v1',
+              'production_repo': 'TheGor-365/ai-course-production-system',
+              'production_branch': 'launch/factory-5d',
+              'production_pr': 315,
+              'source_repo': 'TheGor-365/ai-course-source-library',
+              'source_branch': 'launch/factory-5d-content-semantics',
+              'source_pr': 55,
+              'source_request_path': 'Module 1/Lesson 1/launch_5d/content_semantics/M1-L01-S02_factory_request_v1.json',
+              'expected_external_request_sha256': 'ce7007b153ac8399466103e1577b03366eed2e9424d8661b085c1073f640a62b',
+              'expected_internal_request_id': 'req_22a0fef5ba8a8bf0',
+              'expected_internal_content_hash': '22a0fef5ba8a8bf065992f712ac4bfc28ab4fddb2aca7db9d7874318f1797247',
+              'expected_adapter_receipt_sha256': 'd391448336d915683ae6ee53e325ba399030f8fb8b5736af94e70d8c91a22e80',
+              'gate_id': 'S02_FACTORY_ADAPTER_EXECUTION_GATE',
+              'production_status_context': 'public-runner/factory/s02-adapter-execution',
+              'source_status_context': 'public-runner/content-semantics/s02-adapter-execution',
+              'artifact_policy': 'none',
+              'private_content_public_exposure': False,
+              'real_media_execution': False,
+              'production_green_claimed': False,
+              'no_fake_green': True,
+          }
+          for key, value in expected.items():
+              if payload.get(key) != value:
+                  raise SystemExit(f'policy_error=request_field_mismatch_{key}')
+          for key in ('production_sha', 'source_sha'):
+              if not re.fullmatch(r'[0-9a-f]{40}', payload.get(key, '')):
+                  raise SystemExit(f'policy_error={key}_must_be_full_40_hex')
+          if not os.environ.get('PRIVATE_REPO_PAT'):
+              raise SystemExit('policy_error=missing_private_repo_credential')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              for key, value in payload.items():
+                  if isinstance(value, (str, int)) and key not in {'schema_version'}:
+                      handle.write(f'{key.upper()}={value}\n')
+          print('request_policy=PASS')
+          print('artifact_policy=none')
+          print('private_content_printed=false')
+          PY
+
+      - name: Write pending statuses
+        run: |
+          set -euo pipefail
+          bash scripts/write_private_commit_status.sh \
+            "$PRODUCTION_REPO" "$PRODUCTION_SHA" "$PRODUCTION_STATUS_CONTEXT" pending \
+            "S02 exact adapter execution started" "$PUBLIC_RUN_URL"
+          bash scripts/write_private_commit_status.sh \
+            "$SOURCE_REPO" "$SOURCE_SHA" "$SOURCE_STATUS_CONTEXT" pending \
+            "S02 exact adapter execution started" "$PUBLIC_RUN_URL"
+
+      - name: Clone and verify exact production and source heads
+        id: checkouts
+        run: |
+          set -euo pipefail
+          PROD_DIR="$RUNNER_TEMP/production_repo"
+          SOURCE_DIR="$RUNNER_TEMP/source_repo"
+          git config --global advice.detachedHead false
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git" \
+            "$PROD_DIR" >/dev/null 2>&1
+          git -C "$PROD_DIR" fetch --depth=2 origin \
+            "refs/heads/${PRODUCTION_BRANCH}:refs/remotes/origin/${PRODUCTION_BRANCH}" \
+            >/dev/null 2>&1
+          [[ "$(git -C "$PROD_DIR" rev-parse "refs/remotes/origin/${PRODUCTION_BRANCH}")" == "$PRODUCTION_SHA" ]] \
+            || { echo 'checkout_error=production_branch_head_sha_mismatch'; exit 2; }
+          git -C "$PROD_DIR" checkout --detach "$PRODUCTION_SHA" >/dev/null 2>&1
+
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git" \
+            "$SOURCE_DIR" >/dev/null 2>&1
+          git -C "$SOURCE_DIR" fetch --depth=2 origin \
+            "refs/heads/${SOURCE_BRANCH}:refs/remotes/origin/${SOURCE_BRANCH}" \
+            >/dev/null 2>&1
+          [[ "$(git -C "$SOURCE_DIR" rev-parse "refs/remotes/origin/${SOURCE_BRANCH}")" == "$SOURCE_SHA" ]] \
+            || { echo 'checkout_error=source_branch_head_sha_mismatch'; exit 2; }
+          git -C "$SOURCE_DIR" checkout --detach "$SOURCE_SHA" >/dev/null 2>&1
+
+          echo "production_dir=$PROD_DIR" >> "$GITHUB_OUTPUT"
+          echo "source_dir=$SOURCE_DIR" >> "$GITHUB_OUTPUT"
+          echo 'exact_cross_repo_heads=PASS'
+          echo 'private_content_printed=false'
+
+      - name: Execute sanitized cross-repo gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/s02_adapter_gate_summary.txt"
+          bash scripts/run_s02_factory_adapter_execution_gate.sh \
+            "${{ steps.checkouts.outputs.production_dir }}" \
+            "${{ steps.checkouts.outputs.source_dir }}" \
+            "$SOURCE_REQUEST_PATH" \
+            "$EXPECTED_EXTERNAL_REQUEST_SHA256" \
+            "$EXPECTED_INTERNAL_REQUEST_ID" \
+            "$EXPECTED_INTERNAL_CONTENT_HASH" \
+            "$EXPECTED_ADAPTER_RECEIPT_SHA256" \
+            >"$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          ERROR_CLASS="$(sed -n 's/^error_class=//p' "$SUMMARY_FILE" | tail -n 1)"
+          ERROR_CODE="$(sed -n 's/^error_code=//p' "$SUMMARY_FILE" | tail -n 1)"
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=none
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=none
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "error_class=$ERROR_CLASS" >> "$GITHUB_OUTPUT"
+          echo "error_code=$ERROR_CODE" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then
+            echo 'result=PASS' >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=FAIL' >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Write final statuses
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          if [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]; then
+            STATE=success
+            DESCRIPTION='S02 exact adapter execution passed'
+          elif [[ -n "$EXIT_CODE" ]]; then
+            STATE=failure
+            DESCRIPTION="S02 adapter execution failed: ${ERROR_CODE:-unknown}"
+          else
+            STATE=error
+            DESCRIPTION='S02 adapter execution infrastructure error'
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRODUCTION_REPO" "$PRODUCTION_SHA" "$PRODUCTION_STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+          bash scripts/write_private_commit_status.sh \
+            "$SOURCE_REPO" "$SOURCE_SHA" "$SOURCE_STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+
+      - name: Write compact PR comments
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          [[ -n "$RESULT" ]] || RESULT=ERROR
+          [[ -n "$EXIT_CODE" ]] || EXIT_CODE=2
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=workflow
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=unclassified
+          COMMENT_FILE="$RUNNER_TEMP/s02_adapter_comment.md"
+          {
+            echo '## Public runner — S02 Factory Adapter Execution Gate'
+            echo
+            echo '```text'
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRODUCTION_SHA=$PRODUCTION_SHA"
+            echo "SOURCE_SHA=$SOURCE_SHA"
+            echo "EXTERNAL_REQUEST_SHA256=$EXPECTED_EXTERNAL_REQUEST_SHA256"
+            echo "EXPECTED_INTERNAL_REQUEST_ID=$EXPECTED_INTERNAL_REQUEST_ID"
+            echo "RESULT=$RESULT"
+            echo "EXIT_CODE=$EXIT_CODE"
+            echo "ERROR_CLASS=$ERROR_CLASS"
+            echo "ERROR_CODE=$ERROR_CODE"
+            echo 'TERMINAL_STATE=READY_FOR_RENDER_IF_PASS'
+            echo 'REAL_STATION_OUTPUTS_USED=false'
+            echo 'REAL_MEDIA_EXECUTION=false'
+            echo 'PRODUCTION_READY=false'
+            echo 'PRODUCTION_GREEN_CLAIMED=false'
+            echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
+            echo 'ARTIFACT_POLICY=none'
+            echo 'NO_FAKE_GREEN=true'
+            echo '```'
+          } > "$COMMENT_FILE"
+          bash scripts/write_private_pr_comment.sh "$PRODUCTION_REPO" "$PRODUCTION_PR" "$COMMENT_FILE"
+          bash scripts/write_private_pr_comment.sh "$SOURCE_REPO" "$SOURCE_PR" "$COMMENT_FILE"
+
+      - name: Final result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          echo "gate_id=$GATE_ID"
+          echo "public_run_id=${{ github.run_id }}"
+          echo "production_sha=$PRODUCTION_SHA"
+          echo "source_sha=$SOURCE_SHA"
+          echo "result=$RESULT"
+          echo 'artifact_policy=none'
+          echo 'private_content_printed=false'
+          echo 'real_media_execution=false'
+          [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]
