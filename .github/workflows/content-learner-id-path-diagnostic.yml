@@ -23,19 +23,19 @@ jobs:
     env:
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       PRIVATE_REPO: TheGor-365/ai-course-source-library
-      PRIVATE_BRANCH: launch/factory-5d-content-semantics-snapshot-v2
-      PRIVATE_SHA: 21b8b465fad2d46a7c45ba8a96b03606140cabd6
-      STATUS_CONTEXT: public-runner/content-semantics/snapshot-v2/field-diagnostic
+      PRIVATE_BRANCH: launch/factory-5d-content-semantics
+      PRIVATE_SHA: 4175b9ad01f0a92269600fc180fdd259e256f799
+      STATUS_CONTEXT: public-runner/content-semantics/launch/field-diagnostic
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout public runner
         uses: actions/checkout@v4
 
-      - name: Clone exact source snapshot
+      - name: Clone exact source head
         id: checkout
         run: |
           set -euo pipefail
-          PRIVATE_DIR="$RUNNER_TEMP/source_snapshot_v2"
+          PRIVATE_DIR="$RUNNER_TEMP/source_content_semantics"
           git config --global advice.detachedHead false
           git clone --filter=blob:none --no-checkout \
             "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
