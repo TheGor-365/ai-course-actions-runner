@@ -16,6 +16,11 @@ fail() {
 classify_content_failure() {
   local message="$1"
   case "$message" in
+    *"package no_fake_green must be true"*) echo package_no_fake_green_false ;;
+    *"content role must not claim production GREEN"*) echo content_role_false_green ;;
+    *"S02 manual station commands must be forbidden"*) echo manual_station_commands_not_forbidden ;;
+    *"S02 request must not claim production GREEN"*) echo s02_request_false_green ;;
+    *"authenticated connector attestation missing"*) echo connector_attestation_missing ;;
     *"immutable request hash drift"*) echo immutable_request_hash_drift ;;
     *"source pointer not connector-attested"*) echo source_pointer_not_attested ;;
     *"source hash drift"*) echo source_blob_hash_drift ;;
@@ -25,16 +30,28 @@ classify_content_failure() {
     *"shot intent count mismatch"*) echo shot_intent_count_mismatch ;;
     *"semantic slot count mismatch"*) echo semantic_slot_count_mismatch ;;
     *"ShotIR source input count mismatch"*) echo shotir_input_count_mismatch ;;
+    *"semantic unit order is not contiguous"*) echo semantic_unit_order_mismatch ;;
+    *"slot order is not contiguous"*) echo semantic_slot_order_mismatch ;;
+    *"shot global order is not contiguous"*) echo shot_global_order_mismatch ;;
     *"expected exactly two normalized shot intents per unit"*) echo shots_per_unit_mismatch ;;
-    *"existing 24 visual events are not fully preserved"*) echo visual_event_coverage_mismatch ;;
-    *"existing visual event mapped more than once"*) echo duplicate_visual_event_mapping ;;
+    *"shot semantic unit coverage mismatch"*) echo shot_unit_coverage_mismatch ;;
+    *"ShotIR input coverage is not exactly"*) echo shotir_coverage_mismatch ;;
     *"source-to-production semantic mapping incomplete"*) echo semantic_mapping_incomplete ;;
     *"source-to-production shot mapping incomplete"*) echo shot_mapping_incomplete ;;
+    *"unknown phrase ID"*) echo unknown_phrase_identity ;;
     *"fabricated measured start"*|*"fabricated measured end"*) echo fabricated_measured_timing ;;
     *"invalid duration bounds"*) echo invalid_duration_bounds ;;
+    *"existing 24 visual events are not fully preserved"*) echo visual_event_coverage_mismatch ;;
+    *"existing visual event mapped more than once"*) echo duplicate_visual_event_mapping ;;
+    *"duplicate semantic_unit_id"*) echo duplicate_semantic_unit_id ;;
+    *"duplicate shot_intent_id"*) echo duplicate_shot_intent_id ;;
+    *"duplicate slot_id"*) echo duplicate_slot_id ;;
+    *"duplicate phrase_id"*) echo duplicate_phrase_id ;;
+    *"no technical truth claims"*) echo technical_truth_claims_missing ;;
+    *"incomplete claim field"*) echo technical_truth_claim_incomplete ;;
     *"missing fields"*) echo required_field_missing ;;
     *"empty required field"*) echo required_field_empty ;;
-    *"incomplete claim field"*) echo technical_truth_claim_incomplete ;;
+    *"validator_failed_without_failure_record"*) echo validator_failed_without_failure_record ;;
     *)
       local digest
       digest="$(printf '%s' "$message" | sha256sum | awk '{print $1}')"
