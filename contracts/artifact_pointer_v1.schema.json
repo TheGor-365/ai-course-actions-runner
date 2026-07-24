@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ARTIFACT_POINTER_v1",
+  "title": "Private artifact pointer record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_id", "package_request_id", "station_id", "artifact_type", "sha256", "size_bytes", "codec_or_format", "private_storage_pointer", "producer_version", "created_at", "restore_status"],
+  "properties": {
+    "artifact_id": {"type": "string", "minLength": 1},
+    "package_request_id": {"type": "string", "minLength": 1},
+    "station_id": {"type": "string", "minLength": 1},
+    "artifact_type": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "codec_or_format": {"type": "string", "minLength": 1},
+    "duration_ms_optional": {"type": ["integer", "null"], "minimum": 0},
+    "private_storage_pointer": {"type": "string", "pattern": "^private://"},
+    "producer_version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string"},
+    "backup_pointer_optional": {"type": ["string", "null"]},
+    "restore_status": {"enum": ["NOT_TESTED", "PASS", "FAIL"]},
+    "QC_identity_optional": {"type": ["string", "null"]}
+  }
+}
