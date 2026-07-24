@@ -1,0 +1,191 @@
+name: Content Semantics Snapshot v2 Gate
+
+on:
+  push:
+    branches:
+      - launch/factory-5d-runner-infrastructure
+    paths:
+      - "requests/content_semantics_snapshot_request_v02.json"
+      - "scripts/run_content_semantics_launch_gate.sh"
+      - "scripts/run_content_semantics_snapshot_v2_gate.sh"
+      - ".github/workflows/content-semantics-snapshot-v2-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-repaired-source-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      REQUEST_FILE: requests/content_semantics_snapshot_request_v02.json
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout public runner
+        uses: actions/checkout@v4
+
+      - name: Load fixed snapshot request
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ['REQUEST_FILE']).read_text(encoding='utf-8'))
+          expected = {
+              'schema_version': 'PublicRunnerContentSemanticsSnapshotRequest_v2',
+              'private_repo': 'TheGor-365/ai-course-source-library',
+              'private_branch': 'launch/factory-5d-content-semantics-snapshot-v2',
+              'private_sha': '21b8b465fad2d46a7c45ba8a96b03606140cabd6',
+              'rolling_pr': 55,
+              'gate_id': 'CONTENT_SEMANTICS_SNAPSHOT_V2_GATE',
+              'status_context': 'public-runner/content-semantics/snapshot-v2',
+              'artifact_policy': 'none',
+              'private_content_public_exposure': False,
+              'production_green_claimed': False,
+              'no_fake_green': True,
+          }
+          for key, value in expected.items():
+              if payload.get(key) != value:
+                  raise SystemExit(f'policy_error=request_field_mismatch_{key}')
+          if not os.environ.get('PRIVATE_REPO_PAT'):
+              raise SystemExit('policy_error=missing_private_repo_credential')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              for key in ('private_repo', 'private_branch', 'private_sha', 'rolling_pr', 'gate_id', 'status_context'):
+                  handle.write(f'{key.upper()}={payload[key]}\n')
+          print('snapshot_v2_request_policy=PASS')
+          print('artifact_policy=none')
+          print('private_content_printed=false')
+          PY
+
+      - name: Write pending source status
+        run: |
+          set -euo pipefail
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending \
+            "Content semantics snapshot v2 validation started" "$PUBLIC_RUN_URL"
+
+      - name: Clone and verify immutable snapshot v2
+        id: checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_DIR="$RUNNER_TEMP/source_snapshot_v2"
+          git config --global advice.detachedHead false
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_DIR" >/dev/null 2>&1
+          git -C "$PRIVATE_DIR" fetch --depth=2 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          OBSERVED_SHA="$(git -C "$PRIVATE_DIR" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || {
+            echo 'checkout_error=snapshot_v2_sha_mismatch'
+            exit 2
+          }
+          git -C "$PRIVATE_DIR" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_dir=$PRIVATE_DIR" >> "$GITHUB_OUTPUT"
+          echo 'snapshot_v2_identity=PASS'
+          echo 'private_content_printed=false'
+
+      - name: Run repaired sanitized source gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/content_snapshot_v2_summary.txt"
+          bash scripts/run_content_semantics_snapshot_v2_gate.sh \
+            "${{ steps.checkout.outputs.private_dir }}" \
+            >"$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          ERROR_CLASS="$(sed -n 's/^error_class=//p' "$SUMMARY_FILE" | tail -n 1)"
+          ERROR_CODE="$(sed -n 's/^error_code=//p' "$SUMMARY_FILE" | tail -n 1)"
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=none
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=none
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "error_class=$ERROR_CLASS" >> "$GITHUB_OUTPUT"
+          echo "error_code=$ERROR_CODE" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then
+            echo 'result=PASS' >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=FAIL' >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Write final source status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          if [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]; then
+            STATE=success
+            DESCRIPTION='Content semantics snapshot v2 gate passed'
+          elif [[ -n "$EXIT_CODE" ]]; then
+            STATE=failure
+            DESCRIPTION="Content snapshot v2 failed: ${ERROR_CODE:-unknown}"
+          else
+            STATE=error
+            DESCRIPTION='Content snapshot v2 infrastructure error'
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+
+      - name: Write compact rolling PR comment
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          [[ -n "$RESULT" ]] || RESULT=ERROR
+          [[ -n "$EXIT_CODE" ]] || EXIT_CODE=2
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=workflow
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=unclassified
+          COMMENT_FILE="$RUNNER_TEMP/content_snapshot_v2_comment.md"
+          {
+            echo '## Public runner — Content Semantics Snapshot v2 Gate'
+            echo
+            echo '```text'
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "VALIDATED_SNAPSHOT_BRANCH=$PRIVATE_BRANCH"
+            echo "VALIDATED_SNAPSHOT_SHA=$PRIVATE_SHA"
+            echo "ROLLING_PR=$ROLLING_PR"
+            echo "RESULT=$RESULT"
+            echo "EXIT_CODE=$EXIT_CODE"
+            echo "ERROR_CLASS=$ERROR_CLASS"
+            echo "ERROR_CODE=$ERROR_CODE"
+            echo 'LEARNER_SCANNER_REGRESSION_TESTS=4_EXPECTED'
+            echo 'LATER_ROLLING_BRANCH_COMMITS_VALIDATED=false'
+            echo 'PRIVATE_ACTIONS_GREEN=false'
+            echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
+            echo 'ARTIFACT_POLICY=none'
+            echo 'PRODUCTION_GREEN_CLAIMED=false'
+            echo 'NO_FAKE_GREEN=true'
+            echo '```'
+          } > "$COMMENT_FILE"
+          bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$ROLLING_PR" "$COMMENT_FILE"
+
+      - name: Final result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          echo "gate_id=$GATE_ID"
+          echo "public_run_id=${{ github.run_id }}"
+          echo "validated_snapshot_sha=$PRIVATE_SHA"
+          echo "result=$RESULT"
+          echo 'artifact_policy=none'
+          echo 'private_content_printed=false'
+          [[ "$RESULT" == PASS && "$EXIT_CODE" == 0 ]]
