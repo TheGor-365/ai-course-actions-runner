@@ -76,6 +76,7 @@ python3 -m py_compile \
   "$ROOT/validate_policy_bindings.py" \
   "$ROOT/validate_factory_request_bridge.py" \
   "$ROOT/validate_audio_authority_mapping.py" \
+  "$ROOT/validate_factory_core_reconciliation.py" \
   >/dev/null 2>&1 || fail validator python_compile_failed
 
 python3 "$ROOT/build_content_semantics.py" \
@@ -116,6 +117,12 @@ python3 "$ROOT/validate_factory_request_bridge.py" \
   --self-test \
   >/dev/null 2>&1 || fail validator factory_request_bridge_failed
 
+python3 "$ROOT/validate_factory_core_reconciliation.py" \
+  --request "$ROOT/M1-L01-S02_factory_request_v1.json" \
+  --reconciliation "$ROOT/factory_core_reconciliation_v1.json" \
+  --self-test \
+  >/dev/null 2>&1 || fail validator factory_core_reconciliation_failed
+
 python3 - "$OUT/M1-L01-S01_content_semantics_v1.json" <<'PY' \
   >/dev/null 2>&1 || fail validator generated_contract_counts_failed
 import json
@@ -150,6 +157,7 @@ VALIDATOR_HASH="$(sha256sum "$ROOT/validate_content_semantics.py" | awk '{print 
 POLICY_HASH="$(sha256sum "$ROOT/validate_policy_bindings.py" | awk '{print $1}')"
 BRIDGE_HASH="$(sha256sum "$ROOT/validate_factory_request_bridge.py" | awk '{print $1}')"
 AUDIO_MAPPING_HASH="$(sha256sum "$ROOT/validate_audio_authority_mapping.py" | awk '{print $1}')"
+CORE_RECONCILIATION_HASH="$(sha256sum "$ROOT/validate_factory_core_reconciliation.py" | awk '{print $1}')"
 FACTORY_REQUEST_HASH="$(sha256sum "$ROOT/M1-L01-S02_factory_request_v1.json" | awk '{print $1}')"
 
 cat <<EOF
@@ -163,6 +171,8 @@ audio_authority_mapping=PASS
 content_semantics_validator=PASS
 factory_request_bridge=PASS
 factory_request_negative_self_tests=PASS
+factory_core_reconciliation=PASS
+factory_core_reconciliation_negative_self_tests=PASS
 s01_semantic_units=13
 s01_shot_intents=26
 s01_semantic_slots=13
@@ -176,6 +186,7 @@ sha256_content_validator=$VALIDATOR_HASH
 sha256_policy_validator=$POLICY_HASH
 sha256_factory_request_bridge=$BRIDGE_HASH
 sha256_audio_authority_validator=$AUDIO_MAPPING_HASH
+sha256_factory_core_reconciliation_validator=$CORE_RECONCILIATION_HASH
 sha256_factory_request_file=$FACTORY_REQUEST_HASH
 private_content_printed=false
 artifact_policy=none
