@@ -15,7 +15,14 @@ fail() {
 
 classify_content_failure() {
   local message="$1"
+  if [[ "$message" =~ ^\'([A-Za-z_][A-Za-z0-9_]*)\'$ ]]; then
+    echo "missing_key_${BASH_REMATCH[1]}"
+    return
+  fi
   case "$message" in
+    *"string indices must be integers"*|*"list indices must be integers"*) echo invalid_container_shape ;;
+    *"unhashable type"*) echo invalid_hashable_shape ;;
+    *"is not iterable"*|*"not subscriptable"*) echo invalid_collection_shape ;;
     *"package no_fake_green must be true"*) echo package_no_fake_green_false ;;
     *"content role must not claim production GREEN"*) echo content_role_false_green ;;
     *"S02 manual station commands must be forbidden"*) echo manual_station_commands_not_forbidden ;;
