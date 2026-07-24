@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "schemas": {
+    "private_executor_request_v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "private_executor_request_v1",
+      "type": "object",
+      "required": ["schema_version", "request_id", "package_request_id", "station_id", "attempt_id", "executor_class", "input_manifest_pointer", "input_hash", "command_profile_id", "runtime_lock_id", "resource_limits", "timeout_seconds", "output_artifact_types", "idempotency_key", "cleanup_policy"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "request_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "package_request_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "station_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "attempt_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "executor_class": {"const": "locked_private_Linux_host_or_self_hosted_private_runner"},
+        "input_manifest_pointer": {"type": "string", "pattern": "^private-manifest://"},
+        "input_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "command_profile_id": {"const": "FIXTURE_ARTIFACT_V1"},
+        "runtime_lock_id": {"const": "fixture-runtime-v1"},
+        "resource_limits": {
+          "type": "object",
+          "required": ["cpu_count", "memory_mb", "disk_mb"],
+          "properties": {
+            "cpu_count": {"type": "integer", "minimum": 1, "maximum": 4},
+            "memory_mb": {"type": "integer", "minimum": 64, "maximum": 1024},
+            "disk_mb": {"type": "integer", "minimum": 1, "maximum": 128}
+          },
+          "additionalProperties": false
+        },
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+        "output_artifact_types": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"const": "fixture_text"}},
+        "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,160}$"},
+        "resume_token_optional": {"type": ["string", "null"]},
+        "cleanup_policy": {"const": "fixture_cleanup_v1"}
+      },
+      "additionalProperties": false
+    },
+    "private_executor_receipt_v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "private_executor_receipt_v1",
+      "type": "object",
+      "required": ["schema_version", "request_id", "station_id", "attempt_id", "executor_id", "runtime_lock_id", "started_at", "completed_at", "exit_code", "result", "failure_class", "retryable", "output_artifacts", "sanitized_metrics", "cleanup_status", "private_content_public_exposure"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "request_id": {"type": "string"},
+        "station_id": {"type": "string"},
+        "attempt_id": {"type": "string"},
+        "executor_id": {"const": "private-executor-fixture-v1"},
+        "runtime_lock_id": {"const": "fixture-runtime-v1"},
+        "started_at": {"type": "string"},
+        "completed_at": {"type": "string"},
+        "exit_code": {"type": "integer"},
+        "result": {"enum": ["PASS", "RETRYABLE_FAILURE", "TERMINAL_FAILURE"]},
+        "failure_class": {"enum": ["NONE", "STATION_RETRYABLE_FAILURE", "STATION_TERMINAL_FAILURE"]},
+        "retryable": {"type": "boolean"},
+        "output_artifacts": {"type": "array", "items": {"$ref": "artifact_pointer_record_v1.schema.json"}},
+        "sanitized_metrics": {"type": "object"},
+        "resume_token_optional": {"type": ["string", "null"]},
+        "cleanup_status": {"enum": ["PASS", "DEFERRED", "FAIL"]},
+        "private_content_public_exposure": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "artifact_pointer_record_v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "artifact_pointer_record_v1",
+      "type": "object",
+      "required": ["artifact_id", "package_request_id", "station_id", "artifact_type", "sha256", "size_bytes", "codec_or_format", "private_storage_pointer", "producer_version", "created_at", "restore_status"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "package_request_id": {"type": "string", "minLength": 1},
+        "station_id": {"type": "string", "minLength": 1},
+        "artifact_type": {"const": "fixture_text"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "codec_or_format": {"const": "text/plain; charset=utf-8"},
+        "duration_ms_optional": {"type": ["integer", "null"]},
+        "private_storage_pointer": {"type": "string", "pattern": "^private-artifact://"},
+        "producer_version": {"const": "private-executor-fixture-v1"},
+        "created_at": {"type": "string", "minLength": 1},
+        "backup_pointer_optional": {"type": ["string", "null"], "pattern": "^private-backup://"},
+        "restore_status": {"enum": ["PASS", "NOT_RUN", "FAIL"]},
+        "QC_identity_optional": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

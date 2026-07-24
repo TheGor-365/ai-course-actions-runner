@@ -1,0 +1,53 @@
+name: Runner Infrastructure Self Test
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/run-private-validator.yml"
+      - ".github/workflows/runner-infrastructure-self-test.yml"
+      - "config/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "fixtures/private_executor/**"
+      - "tests/**"
+      - "00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md"
+      - "docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md"
+      - "docs/FACTORY_RUNNER_AUTOMATION_BACKLOG_v01.md"
+  push:
+    branches:
+      - "launch-factory-5d-runner-infrastructure"
+    paths:
+      - ".github/workflows/run-private-validator.yml"
+      - ".github/workflows/runner-infrastructure-self-test.yml"
+      - "config/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "fixtures/private_executor/**"
+      - "tests/**"
+      - "00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md"
+      - "docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md"
+      - "docs/FACTORY_RUNNER_AUTOMATION_BACKLOG_v01.md"
+
+permissions:
+  contents: read
+
+jobs:
+  changed-path-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run policy and private-executor fixture tests
+        run: bash scripts/run_runner_infrastructure_tests.sh
+      - name: Assert public artifact policy
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden = "uses: " + "actions/upload-artifact"
+          hits = [str(p) for p in Path(".github/workflows").glob("*.y*") if forbidden in p.read_text(encoding="utf-8")]
+          if hits:
+              raise SystemExit("public_artifact_upload=" + ",".join(hits))
+          PY
+          echo "public_artifacts_created=false"
+          echo "private_content_public_exposure=false"

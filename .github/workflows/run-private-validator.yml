@@ -30,6 +30,11 @@ on:
           - A3479_CI_SCOPE_GUARD_DOC_GATE
           - M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET
           - A3480_SCRIPT_FIT_PACK_LOCAL_GATE
+          - FACTORY_LAUNCH_CONTROL_PLANE_GATE
+      request_id:
+        description: Stable request id; letters, digits, dot, underscore, colon and dash only
+        required: true
+        type: string
       status_context:
         description: Commit status context
         required: true
@@ -68,6 +73,7 @@ jobs:
       PRIVATE_BRANCH: ${{ inputs.private_branch }}
       PRIVATE_SHA: ${{ inputs.private_sha }}
       GATE_ID: ${{ inputs.gate_id }}
+      REQUEST_ID: ${{ inputs.request_id }}
       STATUS_CONTEXT: ${{ inputs.status_context }}
       WRITE_STATUS: ${{ inputs.write_status }}
       WRITE_PR_COMMENT: ${{ inputs.write_pr_comment }}
@@ -91,22 +97,28 @@ jobs:
             *) echo "policy_error=repo_not_allowlisted"; exit 2 ;;
           esac
           case "$GATE_ID" in
-            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET|A3480_SCRIPT_FIT_PACK_LOCAL_GATE) ;;
+            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET|A3480_SCRIPT_FIT_PACK_LOCAL_GATE|FACTORY_LAUNCH_CONTROL_PLANE_GATE) ;;
             *) echo "policy_error=gate_not_allowlisted"; exit 2 ;;
           esac
           if [[ ! "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "policy_error=private_sha_must_be_full_40_hex"
             exit 2
           fi
+          if [[ ! "$REQUEST_ID" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+            echo "policy_error=unsafe_request_id"
+            exit 2
+          fi
           if [[ "$PRIVATE_BRANCH" == *..* || "$PRIVATE_BRANCH" == /* || "$PRIVATE_BRANCH" == *' '* ]]; then
             echo "policy_error=unsafe_branch_name"
             exit 2
           fi
+          python3 scripts/runner_infrastructure_v1.py resolve-gate "$GATE_ID" "$PRIVATE_REPO" --field profile_id >/dev/null
           echo "policy_guard=pass"
           echo "private_repo=$PRIVATE_REPO"
           echo "private_branch=$PRIVATE_BRANCH"
           echo "private_sha=$PRIVATE_SHA"
           echo "gate_id=$GATE_ID"
+          echo "request_id=$REQUEST_ID"
           echo "artifact_policy=none"
           echo "private_content_printed=false"
 
@@ -150,11 +162,19 @@ jobs:
         continue-on-error: true
         run: |
           set +e
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
-          bash scripts/run_allowlisted_validator.sh "$GATE_ID" "${{ steps.checkout_private.outputs.private_checkout_dir }}" > "$SUMMARY_FILE" 2>&1
+          bash scripts/run_manifest_gate.sh "$GATE_ID" "${{ steps.checkout_private.outputs.private_checkout_dir }}" "$PRIVATE_REPO" > "$SUMMARY_FILE" 2>&1
           RC=$?
+          COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           cat "$SUMMARY_FILE"
+          OUTPUT_SCHEMA_HASH="$(awk -F= '$1=="output_schema_hash"{print $2}' "$SUMMARY_FILE" | tail -n1)"
+          SANITIZED_METRICS_HASH="$(sha256sum "$SUMMARY_FILE" | awk '{print $1}')"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          echo "completed_at=$COMPLETED_AT" >> "$GITHUB_OUTPUT"
+          echo "output_schema_hash=$OUTPUT_SCHEMA_HASH" >> "$GITHUB_OUTPUT"
+          echo "sanitized_metrics_hash=$SANITIZED_METRICS_HASH" >> "$GITHUB_OUTPUT"
           if [[ "$RC" -eq 0 ]]; then
             echo "result=PASS" >> "$GITHUB_OUTPUT"
           else
@@ -175,16 +195,25 @@ jobs:
             echo "## Public Runner Center result"
             echo
             echo '```text'
+            echo "SCHEMA_VERSION=1.0"
             echo "PUBLIC_RUNNER_VALIDATED=$([[ "$RESULT" == "PASS" ]] && echo true || echo false)"
             echo "PUBLIC_RUNNER_REPO=${{ github.repository }}"
+            echo "RUNNER_SHA=${{ github.sha }}"
             echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PUBLIC_JOB_ID=${{ github.job }}"
             echo "PRIVATE_REPO=$PRIVATE_REPO"
             echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
             echo "PRIVATE_SHA=$PRIVATE_SHA"
             echo "GATE_ID=$GATE_ID"
+            echo "REQUEST_ID=$REQUEST_ID"
             echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "STARTED_AT=${{ steps.gate.outputs.started_at }}"
+            echo "COMPLETED_AT=${{ steps.gate.outputs.completed_at }}"
             echo "RESULT=$RESULT"
             echo "EXIT_CODE=$EXIT_CODE"
+            echo "SANITIZED_METRICS_HASH=${{ steps.gate.outputs.sanitized_metrics_hash }}"
+            echo "OUTPUT_SCHEMA_HASH=${{ steps.gate.outputs.output_schema_hash }}"
+            echo "ARTIFACTS_CREATED=false"
             echo "PRIVATE_ACTIONS_GREEN=false"
             echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
             echo "NO_FAKE_GREEN=true"
@@ -229,12 +258,16 @@ jobs:
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
           RESULT="${{ steps.gate.outputs.result }}"
           echo "public_runner_repo=${{ github.repository }}"
+          echo "runner_sha=${{ github.sha }}"
           echo "public_run_id=${{ github.run_id }}"
+          echo "public_job_id=${{ github.job }}"
           echo "private_sha=$PRIVATE_SHA"
           echo "gate_id=$GATE_ID"
+          echo "request_id=$REQUEST_ID"
           echo "result=$RESULT"
-          echo "private_content_printed=false"
-          echo "artifact_policy=none"
+          echo "output_schema_hash=${{ steps.gate.outputs.output_schema_hash }}"
+          echo "private_content_public_exposure=false"
+          echo "artifacts_created=false"
           if [[ "$RESULT" != "PASS" || "$EXIT_CODE" != "0" ]]; then
             exit 1
           fi
