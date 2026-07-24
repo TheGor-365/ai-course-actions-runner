@@ -2,7 +2,7 @@
   "schema_version": "PublicRunnerFactoryCoreRequest_v1",
   "private_repo": "TheGor-365/ai-course-production-system",
   "private_branch": "launch/factory-core-5d",
-  "private_sha": "ff69fc5a428cc47534563f48da4a098716897bf2",
+  "private_sha": "187f87a0f8e98eacd868dcd7ac1275dfd3e1f9c1",
   "private_pr": 315,
   "gate_id": "FACTORY_CORE_LAUNCH_GATE",
   "status_context": "public-runner/factory/core-launch",
