@@ -2,7 +2,7 @@
   "schema_version": "PublicRunnerContentSemanticsRequest_v1",
   "private_repo": "TheGor-365/ai-course-source-library",
   "private_branch": "launch/factory-5d-content-semantics",
-  "private_sha": "743a4c2395f171d471ebaaec0fbfbb7546557ef8",
+  "private_sha": "bb7af6fb9964afd2f5784704a8a19900f6e6c56f",
   "private_pr": 55,
   "gate_id": "CONTENT_SEMANTICS_LAUNCH_GATE",
   "status_context": "public-runner/content-semantics/launch",
