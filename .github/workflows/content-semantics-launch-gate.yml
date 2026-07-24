@@ -147,6 +147,29 @@ jobs:
             "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
             "$DESCRIPTION" "$PUBLIC_RUN_URL"
 
+      - name: Write diagnostic private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=workflow
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=unclassified
+          SAFE_DIAGNOSTIC="$(printf '%s-%s' "$ERROR_CLASS" "$ERROR_CODE" | tr -cd 'a-zA-Z0-9._-')"
+          DIAGNOSTIC_CONTEXT="${STATUS_CONTEXT}/diagnostic/${SAFE_DIAGNOSTIC}"
+          if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then
+            STATE=success
+            DESCRIPTION="Content semantics diagnostic: pass"
+          else
+            STATE=failure
+            DESCRIPTION="Content semantics diagnostic: ${SAFE_DIAGNOSTIC}"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$DIAGNOSTIC_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+
       - name: Write compact private PR comment
         if: ${{ always() }}
         run: |
