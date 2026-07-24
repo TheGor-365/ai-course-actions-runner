@@ -60,9 +60,23 @@ classify_content_failure() {
     *"empty required field"*) echo required_field_empty ;;
     *"validator_failed_without_failure_record"*) echo validator_failed_without_failure_record ;;
     *)
-      local digest
+      local digest shape
       digest="$(printf '%s' "$message" | sha256sum | awk '{print $1}')"
-      echo "unclassified_${digest:0:12}"
+      shape="$(python3 - "$message" <<'PY'
+import re
+import sys
+
+message = sys.argv[1]
+message = re.sub(r"(['\"]).*?\1", " quoted ", message)
+message = re.sub(r"\b[0-9a-fA-F]{32,64}\b", " hash ", message)
+message = re.sub(r"\b(?:M\d+-L\d+|S\d+(?:-[A-Za-z0-9_]+)+|VO_\d+|VE_\d+|B\d+_[A-Za-z0-9_]+)\b", " id ", message)
+message = re.sub(r"[/\\][^\s:]+", " path ", message)
+message = re.sub(r"\b\d+\b", " n ", message)
+message = re.sub(r"[^A-Za-z]+", "_", message).lower().strip("_")
+print((message or "empty")[:96])
+PY
+)"
+      echo "unclassified_${shape}_${digest:0:8}"
       ;;
   esac
 }
