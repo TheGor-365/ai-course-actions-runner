@@ -13,6 +13,36 @@ fail() {
   exit "${3:-1}"
 }
 
+classify_content_failure() {
+  local message="$1"
+  case "$message" in
+    *"immutable request hash drift"*) echo immutable_request_hash_drift ;;
+    *"source pointer not connector-attested"*) echo source_pointer_not_attested ;;
+    *"source hash drift"*) echo source_blob_hash_drift ;;
+    *"learner-facing internal ID leak"*) echo learner_text_internal_id_leak ;;
+    *"unresolved placeholder token"*) echo unresolved_placeholder ;;
+    *"semantic unit count mismatch"*) echo semantic_unit_count_mismatch ;;
+    *"shot intent count mismatch"*) echo shot_intent_count_mismatch ;;
+    *"semantic slot count mismatch"*) echo semantic_slot_count_mismatch ;;
+    *"ShotIR source input count mismatch"*) echo shotir_input_count_mismatch ;;
+    *"expected exactly two normalized shot intents per unit"*) echo shots_per_unit_mismatch ;;
+    *"existing 24 visual events are not fully preserved"*) echo visual_event_coverage_mismatch ;;
+    *"existing visual event mapped more than once"*) echo duplicate_visual_event_mapping ;;
+    *"source-to-production semantic mapping incomplete"*) echo semantic_mapping_incomplete ;;
+    *"source-to-production shot mapping incomplete"*) echo shot_mapping_incomplete ;;
+    *"fabricated measured start"*|*"fabricated measured end"*) echo fabricated_measured_timing ;;
+    *"invalid duration bounds"*) echo invalid_duration_bounds ;;
+    *"missing fields"*) echo required_field_missing ;;
+    *"empty required field"*) echo required_field_empty ;;
+    *"incomplete claim field"*) echo technical_truth_claim_incomplete ;;
+    *)
+      local digest
+      digest="$(printf '%s' "$message" | sha256sum | awk '{print $1}')"
+      echo "unclassified_${digest:0:12}"
+      ;;
+  esac
+}
+
 if [[ -z "$PRIVATE_DIR" || ! -d "$PRIVATE_DIR/.git" ]]; then
   fail policy private_checkout_missing 2
 fi
@@ -39,11 +69,16 @@ cmp \
   "$OUT/M1-L01-S02_immutable_blind_request_v1.json" \
   >/dev/null 2>&1 || fail validator legacy_request_reproducibility_failed
 
-python3 "$ROOT/validate_content_semantics.py" \
+VALIDATOR_LOG="$OUT/content_semantics_validator.log"
+if ! python3 "$ROOT/validate_content_semantics.py" \
   --package "$OUT/M1-L01-S01_content_semantics_v1.json" \
   --request "$OUT/M1-L01-S02_immutable_blind_request_v1.json" \
   --attestation "$ROOT/connector_preflight_attestation_v1.json" \
-  >/dev/null 2>&1 || fail validator content_semantics_validation_failed
+  >"$VALIDATOR_LOG" 2>&1; then
+  FAILURE="$(sed -n 's/^FAILURE=//p' "$VALIDATOR_LOG" | tail -n 1)"
+  [[ -n "$FAILURE" ]] || FAILURE=validator_failed_without_failure_record
+  fail validator "$(classify_content_failure "$FAILURE")"
+fi
 
 python3 "$ROOT/validate_factory_request_bridge.py" \
   --request "$ROOT/M1-L01-S02_factory_request_v1.json" \
@@ -93,7 +128,7 @@ deterministic_build=PASS
 legacy_request_reproducibility=PASS
 content_semantics_validator=PASS
 factory_request_bridge=PASS
-factory_request_negative_self_tests=4_PASS
+factory_request_negative_self_tests=PASS
 s01_semantic_units=13
 s01_shot_intents=26
 s01_semantic_slots=13
