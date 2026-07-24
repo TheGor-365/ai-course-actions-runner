@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [compile, day1, day2, day3, binary, diff]
+        check: [compile, day1, day2, day3, interface, binary, diff]
     env:
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
     steps:
@@ -65,10 +65,12 @@ jobs:
                 11_tools/factory_core/core.py \
                 11_tools/factory_core/station_outputs.py \
                 11_tools/factory_core/executor_boundary.py \
+                11_tools/factory_core/factory_interface.py \
                 11_tools/run_factory_core.py \
                 11_tools/test_factory_core.py \
                 11_tools/test_factory_core_day2.py \
                 11_tools/test_factory_core_day3.py \
+                11_tools/test_factory_interface_adapter.py \
                 >/dev/null 2>&1
               ;;
             day1)
@@ -79,6 +81,9 @@ jobs:
               ;;
             day3)
               python3 11_tools/test_factory_core_day3.py >/dev/null 2>&1
+              ;;
+            interface)
+              python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1
               ;;
             binary)
               if find 04_validators/test_fixtures/factory_core \
