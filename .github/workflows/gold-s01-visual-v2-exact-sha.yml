@@ -66,8 +66,8 @@ jobs:
           RC=$?
           cat "$OUTPUT"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
-          for key in result error_code diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
-            value="$(awk -F= -v key="$key" '$1==key{print $2}' "$OUTPUT" | tail -n1)"
+          for key in result error_code error_detail diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
+            value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
             echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
           done
           echo "summary_hash=$(sha256sum "$OUTPUT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
@@ -87,6 +87,7 @@ jobs:
             echo "RESULT=${{ steps.gate.outputs.result }}"
             echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
             echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
+            echo "ERROR_DETAIL=${{ steps.gate.outputs.error_detail }}"
             echo "DIAGNOSTIC_HASH=${{ steps.gate.outputs.diagnostic_hash }}"
             echo "TEST_COUNT=${{ steps.gate.outputs.test_count }}"
             echo "SEMANTIC_UNITS=${{ steps.gate.outputs.semantic_units }}"
