@@ -9,6 +9,10 @@ on:
       - ".github/workflows/factory-core-launch-diagnostics.yml"
   workflow_dispatch:
 
+concurrency:
+  group: factory-core-launch-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
