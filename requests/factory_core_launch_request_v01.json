@@ -1,9 +1,9 @@
 {
   "schema_version": "PublicRunnerFactoryCoreRequest_v1",
   "private_repo": "TheGor-365/ai-course-production-system",
-  "private_branch": "launch/factory-core-day5-5d",
-  "private_sha": "9967bd47de0aefe325d5dbd53d8bf245e7943e48",
-  "private_pr": 327,
+  "private_branch": "repair/gold-s01-real-factory-execution-v1",
+  "private_sha": "f62de71ff10a0a38dedf1a558dc6290812075375",
+  "private_pr": 346,
   "gate_id": "FACTORY_CORE_LAUNCH_GATE",
   "status_context": "public-runner/factory/core-launch",
   "artifact_policy": "none",
