@@ -4,9 +4,10 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import private_owner_delivery_v1 as core
+import visual_owner_pack_adapter_v1 as visual_adapter
 
 
 def finalize_receipt_chain(
@@ -56,9 +57,10 @@ def execute_finalized(
     *,
     resume_token: str | None = None,
     inject_failure_after_registration: int | None = None,
-    assembler=core.assemble_stills,
+    assembler: Callable[..., dict[str, Path]] | None = None,
     clock=core.utc_now,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    selected_assembler = assembler or visual_adapter.assemble_owner_pack
     registration, restore, manifest = core.execute_request(
         request,
         production_dir,
@@ -66,7 +68,7 @@ def execute_finalized(
         receipt_dir,
         resume_token=resume_token,
         inject_failure_after_registration=inject_failure_after_registration,
-        assembler=assembler,
+        assembler=selected_assembler,
         clock=clock,
     )
     return finalize_receipt_chain(
@@ -81,7 +83,7 @@ def execute_finalized(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Exact private owner delivery with finalized receipt chain"
+        description="Exact private owner delivery with visual owner-pack adapter and finalized receipt chain"
     )
     parser.add_argument("--request", required=True)
     parser.add_argument("--production-dir", required=True)
@@ -102,6 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             inject_failure_after_registration=args.inject_failure_after_registration,
         )
         core.sanitized_summary(registration, restore)
+        print("VISUAL_OWNER_PACK_ADAPTER=PASS")
         print("RECEIPT_CHAIN_INTEGRITY=PASS")
         return 0
     except core.RetryableDeliveryError as exc:

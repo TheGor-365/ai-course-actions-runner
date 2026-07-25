@@ -17,6 +17,7 @@ on:
       - "launch/factory-5d-runner-infrastructure-day2"
       - "launch/factory-5d-runner-infrastructure-day2-consumer"
       - "launch/factory-5d-owner-delivery-private-store"
+      - "launch/factory-5d-owner-delivery-visual-v2"
     paths:
       - ".github/workflows/**"
       - "config/**"
@@ -50,13 +51,15 @@ jobs:
             scripts/alignment_model_provisioning_v1.py \
             scripts/validate_cross_repo_sync_v1.py \
             scripts/private_owner_delivery_v1.py \
+            scripts/visual_owner_pack_adapter_v1.py \
             scripts/run_private_owner_delivery_exact_v1.py \
             tests/test_runner_infrastructure.py \
             tests/test_content_semantics_gate.py \
             tests/test_alignment_model_provisioning.py \
             tests/test_cross_repo_sync.py \
             tests/test_private_owner_delivery.py \
-            tests/test_private_owner_delivery_receipt_chain.py
+            tests/test_private_owner_delivery_receipt_chain.py \
+            tests/test_visual_owner_pack_adapter.py
       - name: Validate contracts
         run: |
           set -euo pipefail
@@ -74,6 +77,8 @@ jobs:
           assert profiles["public_artifact_upload_allowed"] is False
           assert profiles["executor_entrypoint"] == "scripts/run_private_owner_delivery_exact_v1.py"
           assert profiles["direct_internal_module_cli_authoritative"] is False
+          assert profiles["profiles"]["OWNER_DELIVERY_EXISTING_STILLS_V1"]["fixed_assembler"] == "production_visual_runtime_owner_review_pack_v1"
+          assert profiles["profiles"]["OWNER_DELIVERY_EXISTING_STILLS_V1"]["validated_by_runner_pr"] == 9
           assert set(profiles["profiles"]) == {"OWNER_DELIVERY_EXISTING_STILLS_V1", "OWNER_DELIVERY_EXISTING_MEDIA_V1"}
           assert set(schemas["schemas"]) == {
               "private_owner_delivery_request_v1",

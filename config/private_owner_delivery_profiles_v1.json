@@ -12,7 +12,8 @@
       "required_input_count": 17,
       "accepted_timing_required": false,
       "media_render_allowed": false,
-      "fixed_assembler": "production_visual_runtime_review_pack_v1",
+      "fixed_assembler": "production_visual_runtime_owner_review_pack_v1",
+      "validated_by_runner_pr": 9,
       "cleanup_policy": "private_owner_delivery_cleanup_v1"
     },
     "OWNER_DELIVERY_EXISTING_MEDIA_V1": {
