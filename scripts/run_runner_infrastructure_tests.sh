@@ -6,8 +6,10 @@ bash -n scripts/run_manifest_gate.sh
 python3 -m py_compile \
   scripts/runner_infrastructure_v1.py \
   scripts/content_semantics_gate_v1.py \
+  scripts/alignment_model_provisioning_v1.py \
   tests/test_runner_infrastructure.py \
-  tests/test_content_semantics_gate.py
+  tests/test_content_semantics_gate.py \
+  tests/test_alignment_model_provisioning.py
 python3 scripts/runner_infrastructure_v1.py validate-contract
 python3 scripts/runner_infrastructure_v1.py validate-private-contract
 python3 -m unittest discover -s tests -p 'test_*.py' -v
