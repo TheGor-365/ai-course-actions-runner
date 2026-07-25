@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   exact-private-sha-content-semantics-smoke:
@@ -26,10 +27,12 @@ jobs:
       PRIVATE_BRANCH: launch/factory-5d-content-semantics-snapshot-v7
       PRIVATE_SHA: 0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902
       PRIVATE_PR: 55
+      RUNNER_PR: 7
       GATE_ID: CONTENT_SEMANTICS_LAUNCH_GATE
       STATUS_CONTEXT: public-runner/launch-5d/content-semantics-day2
-      REQUEST_ID: runner-infrastructure-day2-content-semantics-004
+      REQUEST_ID: runner-infrastructure-day2-content-semantics-005
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      GH_TOKEN: ${{ github.token }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
@@ -93,32 +96,7 @@ jobs:
           echo "sanitized_metrics_hash=$SANITIZED_METRICS_HASH" >> "$GITHUB_OUTPUT"
           if [[ "$RC" -eq 0 ]]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
           exit 0
-      - name: Emit sanitized receipt envelope
-        if: ${{ always() }}
-        run: |
-          set -euo pipefail
-          echo "schema_version=public-runner-receipt-v1"
-          echo "factory_id=AI_COURSE_FACTORY"
-          echo "runner_repo=${{ github.repository }}"
-          echo "runner_sha=${{ github.sha }}"
-          echo "public_run_id=${{ github.run_id }}"
-          echo "private_repo=$PRIVATE_REPO"
-          echo "private_branch=$PRIVATE_BRANCH"
-          echo "private_sha=$PRIVATE_SHA"
-          echo "gate_id=$GATE_ID"
-          echo "request_id=$REQUEST_ID"
-          echo "status_context=$STATUS_CONTEXT"
-          echo "started_at=${{ steps.gate.outputs.started_at }}"
-          echo "completed_at=${{ steps.gate.outputs.completed_at }}"
-          echo "exit_code=${{ steps.gate.outputs.exit_code }}"
-          echo "result=${{ steps.gate.outputs.result }}"
-          echo "sanitized_metrics_hash=${{ steps.gate.outputs.sanitized_metrics_hash }}"
-          echo "output_schema_hash=${{ steps.gate.outputs.output_schema_hash }}"
-          echo "private_content_public_exposure=false"
-          echo "artifacts_created=false"
-          echo "public_media_artifacts_created=false"
-          echo "no_fake_green=true"
-      - name: Write sanitized receipt to private PR
+      - name: Build sanitized receipt comment
         if: ${{ always() }}
         run: |
           set -euo pipefail
@@ -150,7 +128,13 @@ jobs:
             echo "NO_FAKE_GREEN=true"
             echo '```'
           } > "$RECEIPT_FILE"
-          bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RECEIPT_FILE"
+          cat "$RECEIPT_FILE"
+      - name: Write sanitized receipt to private source PR
+        if: ${{ always() }}
+        run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/public_runner_receipt.md"
+      - name: Write sanitized receipt to runner PR
+        if: ${{ always() }}
+        run: gh pr comment "$RUNNER_PR" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/public_runner_receipt.md"
       - name: Write final private status
         if: ${{ always() }}
         run: |
@@ -168,6 +152,7 @@ jobs:
           [[ -n "${{ steps.gate.outputs.sanitized_metrics_hash }}" ]]
           echo "exact_private_sha_binding=PASS"
           echo "receipt_envelope_complete=true"
+          echo "runner_pr_receipt_writeback=PASS"
           echo "private_pr_receipt_writeback=PASS"
           echo "private_commit_status_writeback=PASS"
           echo "public_media_artifacts_created=false"
