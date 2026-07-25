@@ -22,13 +22,20 @@ SCHEMA_FILE="$(python3 "$ROOT/scripts/runner_infrastructure_v1.py" resolve-gate 
 SCHEMA_HASH="$(sha256sum "$ROOT/$SCHEMA_FILE" | awk '{print $1}')"
 
 set +e
-if [[ "$GATE_ID" == "FACTORY_LAUNCH_CONTROL_PLANE_GATE" ]]; then
-  python3 "$ROOT/scripts/runner_infrastructure_v1.py" run-launch-gate --private-dir "$PRIVATE_DIR"
-  RC=$?
-else
-  bash "$ROOT/scripts/run_allowlisted_validator.sh" "$GATE_ID" "$PRIVATE_DIR"
-  RC=$?
-fi
+case "$GATE_ID" in
+  FACTORY_LAUNCH_CONTROL_PLANE_GATE)
+    python3 "$ROOT/scripts/runner_infrastructure_v1.py" run-launch-gate --private-dir "$PRIVATE_DIR"
+    RC=$?
+    ;;
+  CONTENT_SEMANTICS_LAUNCH_GATE)
+    python3 "$ROOT/scripts/content_semantics_gate_v1.py" --private-dir "$PRIVATE_DIR"
+    RC=$?
+    ;;
+  *)
+    bash "$ROOT/scripts/run_allowlisted_validator.sh" "$GATE_ID" "$PRIVATE_DIR"
+    RC=$?
+    ;;
+esac
 set -e
 
 echo "profile_id=$PROFILE_ID"
