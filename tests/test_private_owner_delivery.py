@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("private_owner_delivery", ROOT / "scripts/private_owner_delivery_v1.py")
@@ -84,6 +86,11 @@ class PrivateOwnerDeliveryTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def execute_private(self, *args, **kwargs):
+        # The production CLI has no bypass. Tests use only synthetic bytes and a fake assembler.
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}, clear=False):
+            return MODULE.execute_request(*args, **kwargs)
+
     def fake_assembler(self, request, checkout, manifest_path, manifest, items, staging):
         staging.mkdir(parents=True, exist_ok=True)
         contact = staging / "contact.png"
@@ -109,7 +116,7 @@ class PrivateOwnerDeliveryTest(unittest.TestCase):
 
     def test_registration_restore_and_sanitized_manifest(self):
         receipts = self.root / "receipts"
-        registration, restore, manifest = MODULE.execute_request(
+        registration, restore, manifest = self.execute_private(
             self.request, self.checkout, self.private_root, receipts, assembler=self.fake_assembler,
             clock=lambda: "2026-07-25T00:00:00Z",
         )
@@ -125,11 +132,11 @@ class PrivateOwnerDeliveryTest(unittest.TestCase):
     def test_injected_failure_resume_is_idempotent(self):
         receipts = self.root / "receipts"
         with self.assertRaises(MODULE.RetryableDeliveryError) as caught:
-            MODULE.execute_request(
+            self.execute_private(
                 self.request, self.checkout, self.private_root, receipts,
                 inject_failure_after_registration=1, assembler=self.fake_assembler,
             )
-        registration, restore, _manifest = MODULE.execute_request(
+        registration, restore, _manifest = self.execute_private(
             self.request, self.checkout, self.private_root, receipts,
             resume_token=caught.exception.resume_token, assembler=self.fake_assembler,
         )
