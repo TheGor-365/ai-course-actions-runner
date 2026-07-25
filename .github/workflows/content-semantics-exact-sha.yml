@@ -23,12 +23,12 @@ jobs:
     timeout-minutes: 15
     env:
       PRIVATE_REPO: TheGor-365/ai-course-source-library
-      PRIVATE_BRANCH: launch/factory-5d-content-semantics
+      PRIVATE_BRANCH: launch/factory-5d-content-semantics-snapshot-v7
       PRIVATE_SHA: 0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902
       PRIVATE_PR: 55
       GATE_ID: CONTENT_SEMANTICS_LAUNCH_GATE
       STATUS_CONTEXT: public-runner/launch-5d/content-semantics-day2
-      REQUEST_ID: runner-infrastructure-day2-content-semantics-003
+      REQUEST_ID: runner-infrastructure-day2-content-semantics-004
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
