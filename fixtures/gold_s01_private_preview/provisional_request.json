@@ -1,0 +1,96 @@
+{
+  "arbitrary_commands_allowed": false,
+  "audio": {
+    "artifact_id": "A3483",
+    "sha256": "74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352"
+  },
+  "captions": {
+    "final": false,
+    "path": null,
+    "provisional": true,
+    "sha256": null
+  },
+  "control": {
+    "branch": "repair/gold-s01-private-preview-control-v1",
+    "repository": "TheGor-365/ai-course-production-system",
+    "request_path": "05_orchestration/gold_s01_closure/runner_infrastructure/requests/gold_s01_private_preview_v1.json",
+    "sha": "2222222222222222222222222222222222222222"
+  },
+  "dynamic_script_path_allowed": false,
+  "execution_authorized": false,
+  "media_in_git_allowed": false,
+  "network_provider_calls_allowed": false,
+  "no_fake_green": true,
+  "output_profile": {
+    "clean_visual_master": {
+      "audio_streams": 0,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "filename": "M1_L01_S01_RU_visual_master_clean_v1.mp4",
+      "fps_den": 1,
+      "fps_num": 30,
+      "height": 1080,
+      "pixel_format": "yuv420p",
+      "video_codec": "h264",
+      "width": 1920
+    },
+    "ru_preview": {
+      "audio_channels": 2,
+      "audio_codec": "aac",
+      "audio_sample_rate": 48000,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "filename": "M1_L01_S01_RU_preview_v1.mp4",
+      "fps_den": 1,
+      "fps_num": 30,
+      "height": 1080,
+      "pixel_format": "yuv420p",
+      "video_codec": "h264",
+      "width": 1920
+    }
+  },
+  "owner_delivery_class": "private-owner-review-local-capability-v1",
+  "production": {
+    "branch": "repair/gold-s01-visual-v2",
+    "repository": "TheGor-365/ai-course-production-system",
+    "sha": "4444444444444444444444444444444444444444"
+  },
+  "profile_id": "M1_L01_S01_RU_GOLD_V2_PRIVATE_PREVIEW_V1",
+  "public_artifact_upload_allowed": false,
+  "public_workflow_execution_allowed": false,
+  "request_id": "gold-s01-private-preview-provisional-v1",
+  "restore_verification_required": true,
+  "runner": {
+    "branch": "repair/gold-s01-private-preview-runner-v1",
+    "repository": "TheGor-365/ai-course-actions-runner",
+    "sha": "1111111111111111111111111111111111111111"
+  },
+  "schema_version": "GoldS01PrivatePreviewRequest_v1",
+  "scope": "M1-L01-S01_0000-1500_ONLY",
+  "store_policy": {
+    "content_addressed": true,
+    "minimum_free_bytes": 21474836480,
+    "overwrite_allowed": false,
+    "primary_class": "private-content-addressed-primary-v1",
+    "replica_class": "private-content-addressed-replica-v1"
+  },
+  "timing": {
+    "accepted_contract_path": null,
+    "accepted_contract_sha256": null,
+    "provisional": true,
+    "timing_authority_accepted": false,
+    "unresolved_rows": 77
+  },
+  "visual": {
+    "no_render_manifest": {
+      "git_blob_sha": "6666666666666666666666666666666666666666",
+      "path": "03_modules/M1/L01/gold_v2/no_render_manifest.json",
+      "provisional": true,
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "visual_input_fingerprint": "fd3dffc15a6aafd4226e65bd6ba45d9f9604eeca100737bd66050d3f1fb09f68"
+    },
+    "production_adapter_git_blob_sha": "5555555555555555555555555555555555555555",
+    "scene_ir_count": 26,
+    "shot_ir_count": 26,
+    "visual_input_fingerprint": "fd3dffc15a6aafd4226e65bd6ba45d9f9604eeca100737bd66050d3f1fb09f68",
+    "visual_runtime_head": "4444444444444444444444444444444444444444"
+  }
+}
