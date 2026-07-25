@@ -141,6 +141,30 @@ jobs:
             "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
             "$DESCRIPTION" "$PUBLIC_RUN_URL"
 
+      - name: Write sanitized diagnostic status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RESULT="${{ steps.gate.outputs.result }}"
+          ERROR_CLASS="${{ steps.gate.outputs.error_class }}"
+          ERROR_CODE="${{ steps.gate.outputs.error_code }}"
+          [[ -n "$RESULT" ]] || RESULT=ERROR
+          [[ -n "$ERROR_CLASS" ]] || ERROR_CLASS=workflow
+          [[ -n "$ERROR_CODE" ]] || ERROR_CODE=unclassified
+          SAFE_CLASS="$(printf '%s' "$ERROR_CLASS" | tr -cd 'a-zA-Z0-9._-')"
+          SAFE_CODE="$(printf '%s' "$ERROR_CODE" | tr -cd 'a-zA-Z0-9._-')"
+          DIAGNOSTIC_CONTEXT="${STATUS_CONTEXT}/diagnostic/${SAFE_CLASS:-unknown}-${SAFE_CODE:-unknown}"
+          if [[ "$RESULT" == PASS ]]; then
+            DIAGNOSTIC_STATE=success
+            DIAGNOSTIC_DESCRIPTION='Snapshot v5 sanitized diagnostic passed'
+          else
+            DIAGNOSTIC_STATE=failure
+            DIAGNOSTIC_DESCRIPTION="Snapshot v5: ${SAFE_CLASS:-unknown}/${SAFE_CODE:-unknown}"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$DIAGNOSTIC_CONTEXT" "$DIAGNOSTIC_STATE" \
+            "$DIAGNOSTIC_DESCRIPTION" "$PUBLIC_RUN_URL"
+
       - name: Write compact rolling PR comment
         if: ${{ always() }}
         run: |
