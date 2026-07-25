@@ -50,7 +50,7 @@ jobs:
               'production_branch': 'launch/factory-5d',
               'production_pr': 315,
               'source_repo': 'TheGor-365/ai-course-source-library',
-              'source_branch': 'launch/factory-5d-content-semantics',
+              'source_branch': 'launch/factory-5d-content-semantics-snapshot-v6',
               'source_pr': 55,
               'source_request_path': 'Module 1/Lesson 1/launch_5d/content_semantics/M1-L01-S02_factory_request_v1.json',
               'expected_external_request_sha256': 'ce7007b153ac8399466103e1577b03366eed2e9424d8661b085c1073f640a62b',
