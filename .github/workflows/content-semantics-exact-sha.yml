@@ -73,20 +73,53 @@ jobs:
         continue-on-error: true
         run: |
           set +e
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
           bash scripts/run_manifest_gate.sh \
             "$GATE_ID" \
             "${{ steps.private_checkout.outputs.private_checkout_dir }}" \
             "$PRIVATE_REPO" > "$SUMMARY_FILE" 2>&1
           RC=$?
+          COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           cat "$SUMMARY_FILE"
+          OUTPUT_SCHEMA_HASH="$(awk -F= '$1=="output_schema_hash"{print $2}' "$SUMMARY_FILE" | tail -n1)"
+          SANITIZED_METRICS_HASH="$(sha256sum "$SUMMARY_FILE" | awk '{print $1}')"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          echo "completed_at=$COMPLETED_AT" >> "$GITHUB_OUTPUT"
+          echo "output_schema_hash=$OUTPUT_SCHEMA_HASH" >> "$GITHUB_OUTPUT"
+          echo "sanitized_metrics_hash=$SANITIZED_METRICS_HASH" >> "$GITHUB_OUTPUT"
           if [[ "$RC" -eq 0 ]]; then
             echo "result=PASS" >> "$GITHUB_OUTPUT"
           else
             echo "result=FAIL" >> "$GITHUB_OUTPUT"
           fi
           exit 0
+      - name: Emit sanitized receipt envelope
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          echo "schema_version=public-runner-receipt-v1"
+          echo "factory_id=AI_COURSE_FACTORY"
+          echo "runner_repo=${{ github.repository }}"
+          echo "runner_sha=${{ github.sha }}"
+          echo "public_run_id=${{ github.run_id }}"
+          echo "private_repo=$PRIVATE_REPO"
+          echo "private_branch=$PRIVATE_BRANCH"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "gate_id=$GATE_ID"
+          echo "request_id=$REQUEST_ID"
+          echo "status_context=$STATUS_CONTEXT"
+          echo "started_at=${{ steps.gate.outputs.started_at }}"
+          echo "completed_at=${{ steps.gate.outputs.completed_at }}"
+          echo "exit_code=${{ steps.gate.outputs.exit_code }}"
+          echo "result=${{ steps.gate.outputs.result }}"
+          echo "sanitized_metrics_hash=${{ steps.gate.outputs.sanitized_metrics_hash }}"
+          echo "output_schema_hash=${{ steps.gate.outputs.output_schema_hash }}"
+          echo "private_content_public_exposure=false"
+          echo "artifacts_created=false"
+          echo "public_media_artifacts_created=false"
+          echo "no_fake_green=true"
       - name: Write final private status
         if: ${{ always() }}
         run: |
@@ -105,10 +138,12 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
-          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
+          [[ -n "${{ steps.gate.outputs.output_schema_hash }}" ]]
+          [[ -n "${{ steps.gate.outputs.sanitized_metrics_hash }}" ]]
           echo "exact_private_sha_binding=PASS"
-          echo "content_semantics_gate=PASS"
+          echo "receipt_envelope_complete=true"
           echo "private_commit_status_writeback=PASS"
           echo "public_media_artifacts_created=false"
           echo "private_content_public_exposure=false"
+          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
