@@ -3,26 +3,22 @@ name: Runner Infrastructure Self Test
 on:
   pull_request:
     paths:
-      - ".github/workflows/run-private-validator.yml"
-      - ".github/workflows/runner-infrastructure-self-test.yml"
+      - ".github/workflows/**"
       - "config/**"
       - "schemas/**"
       - "scripts/**"
-      - "fixtures/private_executor/**"
       - "tests/**"
       - "00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md"
       - "docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md"
       - "docs/FACTORY_RUNNER_AUTOMATION_BACKLOG_v01.md"
   push:
     branches:
-      - "launch-factory-5d-runner-infrastructure"
+      - "launch/factory-5d-runner-infrastructure-day2"
     paths:
-      - ".github/workflows/run-private-validator.yml"
-      - ".github/workflows/runner-infrastructure-self-test.yml"
+      - ".github/workflows/**"
       - "config/**"
       - "schemas/**"
       - "scripts/**"
-      - "fixtures/private_executor/**"
       - "tests/**"
       - "00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md"
       - "docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md"
@@ -34,10 +30,10 @@ permissions:
 jobs:
   changed-path-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Run policy and private-executor fixture tests
+      - name: Run policy and fixture tests
         run: bash scripts/run_runner_infrastructure_tests.sh
       - name: Assert public artifact policy
         run: |
@@ -52,18 +48,18 @@ jobs:
           echo "public_artifacts_created=false"
           echo "private_content_public_exposure=false"
 
-  exact-private-sha-control-plane-smoke:
+  exact-private-sha-content-semantics-smoke:
     if: ${{ github.event_name == 'push' }}
     needs: changed-path-tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
-      PRIVATE_REPO: TheGor-365/ai-course-production-system
-      PRIVATE_BRANCH: launch-runner-control-plane-evidence
-      PRIVATE_SHA: 07f5b2b525b0fb4a2e94aa10b5176386001b63e4
-      GATE_ID: FACTORY_LAUNCH_CONTROL_PLANE_GATE
-      STATUS_CONTEXT: public-runner/launch-5d/runner-infrastructure-day1
-      REQUEST_ID: runner-infrastructure-day1-bootstrap-001
+      PRIVATE_REPO: TheGor-365/ai-course-source-library
+      PRIVATE_BRANCH: launch/factory-5d-content-semantics
+      PRIVATE_SHA: 4175b9ad01f0a92269600fc180fdd259e256f799
+      GATE_ID: CONTENT_SEMANTICS_LAUNCH_GATE
+      STATUS_CONTEXT: public-runner/launch-5d/content-semantics-day2
+      REQUEST_ID: runner-infrastructure-day2-content-semantics-001
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -79,9 +75,7 @@ jobs:
           echo "private_content_public_exposure=false"
           echo "artifacts_created=false"
       - name: Write pending private status
-        run: |
-          set -euo pipefail
-          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Runner infrastructure exact-SHA smoke started" "$PUBLIC_RUN_URL"
+        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Content semantics exact-SHA gate started" "$PUBLIC_RUN_URL"
       - name: Checkout exact private SHA
         id: private_checkout
         run: |
@@ -97,7 +91,7 @@ jobs:
           echo "private_branch_head_verified=true"
           echo "private_sha=$PRIVATE_SHA"
           echo "private_content_public_exposure=false"
-      - name: Run exact-SHA control-plane gate
+      - name: Run exact-SHA content semantics gate
         id: gate
         continue-on-error: true
         run: |
@@ -113,17 +107,17 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          RESULT="${{ steps.gate.outputs.result }}"
-          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
-          if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then STATE=success; DESCRIPTION="Runner infrastructure exact-SHA smoke passed"; else STATE=failure; DESCRIPTION="Runner infrastructure exact-SHA smoke failed"; fi
+          if [[ "${{ steps.gate.outputs.result }}" == PASS && "${{ steps.gate.outputs.exit_code }}" == 0 ]]; then STATE=success; DESCRIPTION="Content semantics exact-SHA gate passed"
+          else STATE=failure; DESCRIPTION="Content semantics exact-SHA gate failed"; fi
           bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" "$DESCRIPTION" "$PUBLIC_RUN_URL"
       - name: Final exact-SHA assertion
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
-          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
+          [[ "${{ steps.gate.outputs.result }}" == PASS ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == 0 ]]
           echo "exact_private_sha_binding=PASS"
+          echo "content_semantics_gate=PASS"
           echo "private_commit_status_writeback=PASS"
           echo "public_media_artifacts_created=false"
           echo "private_content_public_exposure=false"
