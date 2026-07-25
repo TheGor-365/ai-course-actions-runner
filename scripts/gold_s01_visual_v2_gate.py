@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 EXPECTED_REPO = "TheGor-365/ai-course-production-system"
 EXPECTED_BRANCH = "repair/gold-s01-visual-runtime-v2"
-EXPECTED_SHA = "12b16de26386cbf0e7bf646cf7283495079f5dec"
+EXPECTED_SHA = "42d9a351f4085639fc0c0813ee9cef31cdbc0b37"
 EXPECTED_PR = 349
 EXPECTED_NO_RENDER = "e71157aa5cf3d43281fb274ebad41fbc082716e94bc37f9ef534ae5d42b5d109"
 EXPECTED_FINGERPRINT = "5d6d4c194b363571a504ef35a3bd00d767fcd53241dd6cb683ae36867a3253f4"
