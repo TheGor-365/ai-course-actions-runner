@@ -1,0 +1,35 @@
+{
+  "schema_version": "factory-sync-epoch-v1",
+  "factory_id": "AI_COURSE_FACTORY",
+  "observed_at_utc": "2026-07-25T12:35:00Z",
+  "integration_heads": {
+    "TheGor-365/ai-course-production-system": {
+      "branch": "launch/factory-5d",
+      "sha": "2be2436ec58aa5f16063a90d497b76b5e6456742"
+    },
+    "TheGor-365/ai-course-source-library": {
+      "branch": "launch/factory-5d",
+      "sha": "e10954135dfe0563aef6bb07fd84e777a079ce3a"
+    },
+    "TheGor-365/ai-course-actions-runner": {
+      "branch": "launch/factory-5d",
+      "sha": "32092d3cfa8a01694335249d37409a16f5a091e6"
+    }
+  },
+  "active_upstream_heads": {
+    "content-semantics": {
+      "repository": "TheGor-365/ai-course-source-library",
+      "branch": "launch/factory-5d-content-semantics",
+      "sha": "4175b9ad01f0a92269600fc180fdd259e256f799",
+      "pr": 55
+    },
+    "audio-sync": {
+      "repository": "TheGor-365/ai-course-production-system",
+      "branch": "launch/factory-5d-audio-sync",
+      "sha": "2dbd26aa8716185565cdc0607d6c76ff9c31794c",
+      "pr": 318
+    }
+  },
+  "branch_format": "launch/factory-5d-<role-slug>",
+  "no_fake_green": true
+}
