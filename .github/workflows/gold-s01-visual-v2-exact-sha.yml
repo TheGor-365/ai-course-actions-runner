@@ -65,10 +65,8 @@ jobs:
             --private-sha "$PRIVATE_SHA" > "$OUTPUT" 2>&1
           RC=$?
           cat "$OUTPUT"
-          RESULT="$(awk -F= '$1=="result"{print $2}' "$OUTPUT" | tail -n1)"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
-          echo "result=${RESULT:-FAIL}" >> "$GITHUB_OUTPUT"
-          for key in test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
+          for key in result error_code diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
             value="$(awk -F= -v key="$key" '$1==key{print $2}' "$OUTPUT" | tail -n1)"
             echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
           done
@@ -88,6 +86,8 @@ jobs:
             echo "PRIVATE_PR=$PRIVATE_PR"
             echo "RESULT=${{ steps.gate.outputs.result }}"
             echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
+            echo "DIAGNOSTIC_HASH=${{ steps.gate.outputs.diagnostic_hash }}"
             echo "TEST_COUNT=${{ steps.gate.outputs.test_count }}"
             echo "SEMANTIC_UNITS=${{ steps.gate.outputs.semantic_units }}"
             echo "SHOT_IR_COUNT=${{ steps.gate.outputs.shot_ir_count }}"
@@ -117,7 +117,7 @@ jobs:
           if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
             state=success; description="Gold S01 visual v2 exact-SHA gate passed"
           else
-            state=failure; description="Gold S01 visual v2 exact-SHA gate failed"
+            state=failure; description="Gold S01 visual v2 exact-SHA gate failed: ${{ steps.gate.outputs.error_code }}"
           fi
           bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$state" "$description" "$RUN_URL"
       - name: Final assertion
