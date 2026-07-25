@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT_ID=PUBLIC_RUNNER_CENTER_CONTRACT_v01
-STATUS=ACTIVE_EXECUTION_PLANE_A3502_FACTORY_SYNC_CURRENT_ALLOWLIST_A3480
+STATUS=ACTIVE_LAUNCH_5D_DAY1_EXECUTION_FRAMEWORK
 FACTORY_ID=AI_COURSE_FACTORY
 REPO=TheGor-365/ai-course-actions-runner
 ROLE=execution_only_machine_shop
@@ -30,7 +30,7 @@ FINAL_RELEASE_AUTHORITY=false
 PRIVATE_ACTIONS_GREEN=false
 ```
 
-A runner PASS means only that the specified allowlisted gate passed against the exact private SHA. It does not independently promote production state.
+A runner PASS means only that the named allowlisted gate passed against the exact private SHA.
 
 ## 3. Safety boundaries
 
@@ -42,6 +42,7 @@ NO_PUBLIC_VIDEO_ARTIFACTS_BY_DEFAULT=true
 NO_SECRET_PRINTING=true
 NO_ARBITRARY_SHELL=true
 ALLOWLISTED_GATES_ONLY=true
+FIXED_GATE_MANIFEST=config/public_gate_manifest_v1.json
 EVERY_RUN_BINDS_TO_PRIVATE_SHA=true
 EVERY_GREEN_HAS_EVIDENCE=true
 PUBLIC_ARTIFACTS_DEFAULT=none
@@ -49,36 +50,22 @@ PUBLIC_ARTIFACTS_DEFAULT=none
 
 ## 4. Allowed execution model
 
-The runner may:
+The public runner may accept only an allowlisted repository, explicit branch, full 40-character SHA, fixed gate ID and sanitized writeback metadata. It verifies branch head equality before execution.
 
-1. accept only an allowlisted private repository;
-2. accept an explicit branch and full 40-character SHA;
-3. verify that branch head equals the supplied SHA;
-4. execute only a named allowlisted gate;
-5. print only sanitized compact evidence;
-6. write a commit status and optional compact PR comment.
-
-Required evidence fields:
+Required public request additions:
 
 ```text
-runner_repo
-public_run_id
-private_repo
-private_branch
-private_sha
-gate_id
-status_context
-exit_code
-result
-sanitized_counts_or_hashes
-private_content_public_exposure=false
+REQUEST_ID_REQUIRED=true
+REQUEST_ID_PATTERN=^[A-Za-z0-9._:-]{1,128}$
+DYNAMIC_COMMAND_INPUT=false
+DYNAMIC_SCRIPT_PATH_INPUT=false
 ```
 
 ## 5. Current private repository allowlist
 
 ```text
-ALLOWLISTED_PRIVATE_REPO_1=TheGor-365/ai-course-production-system
-ALLOWLISTED_PRIVATE_REPO_2=TheGor-365/ai-course-source-library
+TheGor-365/ai-course-production-system
+TheGor-365/ai-course-source-library
 ```
 
 ## 6. Current gate allowlist
@@ -89,6 +76,7 @@ A3479_CONTENT_ONLY_LOCAL_GATE
 A3479_CI_SCOPE_GUARD_DOC_GATE
 M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET
 A3480_SCRIPT_FIT_PACK_LOCAL_GATE
+FACTORY_LAUNCH_CONTROL_PLANE_GATE
 ```
 
 Capability classification:
@@ -99,57 +87,50 @@ A3479_CONTENT_ONLY_LOCAL_GATE=real_bounded_contract_validator
 A3479_CI_SCOPE_GUARD_DOC_GATE=inventory_only_not_production_green
 M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET=count_only_smoke_not_full_import_validation
 A3480_SCRIPT_FIT_PACK_LOCAL_GATE=real_bounded_text_contract_validator
+FACTORY_LAUNCH_CONTROL_PLANE_GATE=bounded_launch_plan_and_OC_metadata_validator_not_production_green
 ```
 
-The count-only gates must not be described as semantic production validation.
-
-## 7. Current factory stage and execution gap
+## 7. Current factory stage and non-claims
 
 ```text
-SYNC_EPOCH=FACTORY_THREE_REPO_A3502_OC_RECONCILIATION_v01
-RUNNER_AUDIT_BASE_SHA=0a32d184829456125401f25ffa8ffec0255d4a71
 CURRENT_PRODUCTION_STAGE=A3502_STILL_FRAME_QC_GATE_NO_FULL_RENDER
-CURRENT_PRODUCTION_NEXT_SAFE_STEP=run_no_render_TypeScript_static_validator_and_Remotion_composition_enumeration_on_locked_Linux_host
 RUNNER_A3502_GATE_IMPLEMENTED=false
 RUNNER_A3502_RENDER_ALLOWED=false
 CURRENT_A3502_EXECUTION_PATH=private_locked_Linux_host
+FACTORY_LAUNCH_CONTROL_PLANE_GATE_ADVANCES_A3502=false
+FACTORY_LAUNCH_CONTROL_PLANE_GATE_CREATES_MEDIA=false
 ```
 
-## 8. Conditions for adding a new runner gate
+## 8. Gate admission policy
 
-A gate may be added only when all are true:
+A gate is valid only when present in the workflow choice list, fixed manifest, dispatcher, this contract and the dispatch runbook matrix. `scripts/runner_infrastructure_v1.py validate-contract` enforces set equality.
 
 ```text
 GATE_INPUT_SCHEMA_DEFINED=true
 GATE_OUTPUT_SCHEMA_DEFINED=true
-PRIVATE_CONTENT_SANITIZATION_PROVEN=true
+PRIVATE_CONTENT_SANITIZATION_REQUIRED=true
 ARBITRARY_COMMAND_INPUT_ABSENT=true
 EXACT_PRIVATE_SHA_BINDING=true
-REPRODUCIBLE_DEPENDENCIES_DEFINED=true
-EXECUTION_HOST_REQUIREMENTS_DECLARED=true
 TIMEOUT_AND_RESOURCE_LIMITS_DEFINED=true
 FAILURE_CODES_DEFINED=true
-STATUS_CONTEXT_DEFINED=true
-PRODUCTION_CONSUMPTION_VALIDATOR_DEFINED=true
 NON_CLAIMS_DEFINED=true
 ```
 
-## 9. A3502 runner migration requirements
+## 9. Private executor interface v1
 
-Before A3502 metadata validation can run here:
+The public runner does not execute private media. The repository now contains schemas and a local non-media fixture proving interface mechanics only:
 
 ```text
-A3502_SANITIZED_GATE_SCRIPT_REQUIRED=true
-EXACT_NODE_REMOTION_DEPENDENCY_BOOTSTRAP_REQUIRED=true
-EXACT_FONT_INSTALL_OR_CONTAINER_IMAGE_REQUIRED=true
-BROWSER_PROVISIONING_POLICY_REQUIRED=true
-HOST_CODEC_LOCK_COMPATIBILITY_POLICY_REQUIRED=true
-PRIVATE_ARTIFACT_STORE_NOT_REQUIRED_FOR_NO_RENDER_GATE=true
-PUBLIC_MEDIA_ARTIFACTS_FORBIDDEN=true
-PRODUCTION_SHA_AND_LOCK_IDENTITY_REQUIRED=true
+REQUEST_SCHEMA=schemas/private_executor_v1.schemas.json#private_executor_request_v1
+RECEIPT_SCHEMA=schemas/private_executor_v1.schemas.json#private_executor_receipt_v1
+ARTIFACT_POINTER_SCHEMA=schemas/private_executor_v1.schemas.json#artifact_pointer_record_v1
+FIXED_PROFILE=FIXTURE_ARTIFACT_V1
+FIXTURE_EXECUTOR=scripts/runner_infrastructure_v1.py execute-fixture
+ACTUAL_PRIVATE_ARTIFACT_STORE_CONNECTED=false
+SELF_HOSTED_PRIVATE_MEDIA_RUNNER_CONNECTED=false
 ```
 
-Before any media render can use an automated runner, a separate private/self-hosted runner contract and private artifact-store policy are required. Public GitHub-hosted media output remains forbidden.
+The fixture proves idempotency, retry/resume, pointer-only sanitized stdout and SHA-verified backup/restore. It does not prove S01 execution.
 
 ## 10. Artifact policy
 
@@ -161,27 +142,20 @@ PUBLIC_RUNNER_UPLOAD_ARTIFACT_AUDIO=false
 PUBLIC_RUNNER_UPLOAD_ARTIFACT_VIDEO=false
 PROVIDER_RAW_PAYLOAD_PUBLICATION=false
 PRIVATE_SOURCE_ARCHIVE_PUBLICATION=false
+PRIVATE_POINTER_IN_PUBLIC_LOGS=false
 ```
 
-## 11. Important-step writeback
-
-When the runner allowlist, workflow contract or execution authority changes:
+## 11. Day 1 capability truth
 
 ```text
-UPDATE_RUNNER_CENTER_CONTRACT=true
-UPDATE_DISPATCH_RUNBOOK=true
-UPDATE_RUNNER_AUTOMATION_BACKLOG=true
-UPDATE_PRODUCTION_THREE_REPO_TOPOLOGY=true
-UPDATE_PRODUCTION_AUTOMATION_PROCESS_MAP=true
-UPDATE_CURRENT_PRODUCTION_HANDOFF=true
-RECORD_RUNNER_HEAD_AND_PROVEN_RUNS=true
-```
-
-## 12. Current next runner action
-
-```text
-CURRENT_RUNNER_MODE=standby_execution_plane
-NEXT_RUNNER_ENGINEERING_ACTION=design_A3502_no_render_sanitized_gate_after_local_reference_PASS
-DO_NOT_ADD_MEDIA_RENDER_GATE=true
-DO_NOT_CLAIM_A3502_SUPPORT=true
+RUNNER_CONTRACT_SELF_VALIDATOR=implemented_changed_path_test_required
+GENERIC_FIXED_GATE_MANIFEST=implemented_changed_path_test_required
+FACTORY_LAUNCH_CONTROL_PLANE_GATE=implemented_not_live_dispatched
+PRIVATE_EXECUTOR_INTERFACE_V1=implemented_fixture_only
+RETRY_RESUME=implemented_fixture_only
+ARTIFACT_POINTER_RECEIPT=implemented_fixture_only
+BACKUP_RESTORE_SHA=implemented_fixture_only
+PUBLIC_MEDIA_ARTIFACTS=false
+PRIVATE_CONTENT_PUBLIC_EXPOSURE=false
+DAY1_STATUS=YELLOW_UNTIL_GITHUB_ACTIONS_AND_EXACT_PRIVATE_SHA_GATE_RUN
 ```

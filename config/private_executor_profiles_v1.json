@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "arbitrary_command_input_allowed": false,
+  "profiles": {
+    "FIXTURE_ARTIFACT_V1": {
+      "executor_class": "locked_private_Linux_host_or_self_hosted_private_runner",
+      "runtime_lock_id": "fixture-runtime-v1",
+      "cleanup_policy": "fixture_cleanup_v1",
+      "output_artifact_types": ["fixture_text"],
+      "media": false,
+      "fixture_only": true
+    }
+  }
+}
