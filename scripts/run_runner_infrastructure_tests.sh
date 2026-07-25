@@ -3,7 +3,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 bash -n scripts/run_manifest_gate.sh
-python3 -m py_compile scripts/runner_infrastructure_v1.py tests/test_runner_infrastructure.py
+python3 -m py_compile \
+  scripts/runner_infrastructure_v1.py \
+  scripts/content_semantics_gate_v1.py \
+  tests/test_runner_infrastructure.py \
+  tests/test_content_semantics_gate.py
 python3 scripts/runner_infrastructure_v1.py validate-contract
 python3 scripts/runner_infrastructure_v1.py validate-private-contract
 python3 -m unittest discover -s tests -p 'test_*.py' -v
