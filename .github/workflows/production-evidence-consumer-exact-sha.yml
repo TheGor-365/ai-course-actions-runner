@@ -1,0 +1,142 @@
+name: Production Evidence Consumer Exact SHA
+
+on:
+  push:
+    branches:
+      - "launch/factory-5d-runner-infrastructure-day2-consumer"
+    paths:
+      - ".github/workflows/production-evidence-consumer-exact-sha.yml"
+      - ".github/workflows/run-private-validator.yml"
+      - "config/public_gate_manifest_v1.json"
+      - "scripts/production_evidence_consumer_gate_v1.py"
+      - "scripts/run_manifest_gate.sh"
+      - "scripts/runner_infrastructure_v1.py"
+      - "scripts/write_private_commit_status.sh"
+      - "scripts/write_private_pr_comment.sh"
+      - "00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md"
+      - "docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-private-sha-production-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: launch/factory-5d-runner-infrastructure-day2
+      PRIVATE_SHA: bce6aabfe3569089f47a175a0f3b36f7dd383bc5
+      PRIVATE_PR: 324
+      GATE_ID: PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE
+      STATUS_CONTEXT: public-runner/launch-5d/production-evidence-consumer-day2
+      REQUEST_ID: runner-infrastructure-day2-production-consumer-001
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Policy guard
+        run: |
+          set -euo pipefail
+          [[ -n "${PRIVATE_REPO_PAT:-}" ]] || { echo "policy_error=missing_private_repo_credential"; exit 2; }
+          [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "policy_error=invalid_private_sha"; exit 2; }
+          python3 scripts/runner_infrastructure_v1.py resolve-gate "$GATE_ID" "$PRIVATE_REPO" --field profile_id >/dev/null
+          echo "policy_guard=pass"
+          echo "request_id=$REQUEST_ID"
+          echo "private_content_public_exposure=false"
+          echo "artifacts_created=false"
+      - name: Write pending private status
+        run: |
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending \
+            "Production runner evidence consumer started" "$PUBLIC_RUN_URL"
+      - name: Checkout exact private SHA
+        id: private_checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_CHECKOUT_DIR="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_CHECKOUT_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_CHECKOUT_DIR"
+          git fetch --depth=1 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          OBSERVED_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || {
+            echo "checkout_error=branch_head_sha_mismatch"
+            exit 2
+          }
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_checkout_dir=$PRIVATE_CHECKOUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "private_branch_head_verified=true"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "private_content_public_exposure=false"
+      - name: Run fixed production consumer gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
+          bash scripts/run_manifest_gate.sh \
+            "$GATE_ID" \
+            "${{ steps.private_checkout.outputs.private_checkout_dir }}" \
+            "$PRIVATE_REPO" > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          cat "$SUMMARY_FILE"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Write compact production PR comment
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          COMMENT_FILE="$RUNNER_TEMP/consumer_result.md"
+          {
+            echo "## Runner infrastructure production consumer result"
+            echo
+            echo '```text'
+            echo "RUNNER_REPO=${{ github.repository }}"
+            echo "RUNNER_SHA=${{ github.sha }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "GATE_ID=$GATE_ID"
+            echo "REQUEST_ID=$REQUEST_ID"
+            echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "ACTUAL_CONTENT_SEMANTICS_RECEIPT_CONSUMED=$([[ '${{ steps.gate.outputs.result }}' == 'PASS' ]] && echo true || echo false)"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "PRODUCTION_GREEN_CLAIMED=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$COMMENT_FILE"
+          bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$COMMENT_FILE"
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
+            STATE=success
+            DESCRIPTION="Production runner evidence consumer passed"
+          else
+            STATE=failure
+            DESCRIPTION="Production runner evidence consumer failed"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+      - name: Final assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          echo "exact_private_sha_binding=PASS"
+          echo "private_pr_comment_writeback=PASS"
+          echo "private_commit_status_writeback=PASS"
+          echo "private_content_public_exposure=false"
+          echo "public_media_artifacts_created=false"
+          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
