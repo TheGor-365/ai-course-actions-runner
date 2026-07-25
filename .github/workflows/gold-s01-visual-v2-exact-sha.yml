@@ -9,6 +9,8 @@ on:
       - "tests/test_gold_s01_visual_v2_gate.py"
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 jobs:
   exact-private-sha:
     runs-on: ubuntu-latest
@@ -18,8 +20,10 @@ jobs:
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
       PRIVATE_SHA: 12b16de26386cbf0e7bf646cf7283495079f5dec
       PRIVATE_PR: 349
+      RUNNER_PR: 15
       STATUS_CONTEXT: public-runner/gold-s01/visual-v2-no-render
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      GH_TOKEN: ${{ github.token }}
       RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +40,7 @@ jobs:
           test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
           test "$PRIVATE_SHA" = "12b16de26386cbf0e7bf646cf7283495079f5dec"
           test "$PRIVATE_PR" = "349"
+          test "$RUNNER_PR" = "15"
           echo "public_artifact_policy=none"
           echo "private_content_public_exposure=false"
       - name: Write pending private status
@@ -112,6 +117,9 @@ jobs:
       - name: Write receipt to private PR
         if: ${{ always() }}
         run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/receipt.md"
+      - name: Write diagnostic receipt to runner PR
+        if: ${{ always() }}
+        run: gh pr comment "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/receipt.md"
       - name: Write final private status
         if: ${{ always() }}
         run: |
