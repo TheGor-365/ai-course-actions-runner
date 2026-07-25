@@ -1,7 +1,7 @@
 {
   "schema_version": "factory-sync-epoch-v1",
   "factory_id": "AI_COURSE_FACTORY",
-  "observed_at_utc": "2026-07-25T12:35:00Z",
+  "observed_at_utc": "2026-07-25T12:44:00Z",
   "integration_heads": {
     "TheGor-365/ai-course-production-system": {
       "branch": "launch/factory-5d",
@@ -20,7 +20,7 @@
     "content-semantics": {
       "repository": "TheGor-365/ai-course-source-library",
       "branch": "launch/factory-5d-content-semantics",
-      "sha": "4175b9ad01f0a92269600fc180fdd259e256f799",
+      "sha": "0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902",
       "pr": 55
     },
     "audio-sync": {
