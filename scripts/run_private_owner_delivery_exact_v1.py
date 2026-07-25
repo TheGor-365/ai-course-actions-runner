@@ -9,6 +9,19 @@ from typing import Any, Callable, Mapping, Sequence
 import private_owner_delivery_v1 as core
 import visual_owner_pack_adapter_v1 as visual_adapter
 
+LEGACY_ARTIFACT_FILENAME = core.artifact_filename
+
+
+def exact_artifact_filename(artifact_type: str, source: Path) -> str:
+    if artifact_type == "still_archive":
+        if source.suffix.lower() != ".zip":
+            raise core.DeliveryError(
+                "STILL_ARCHIVE_FORMAT_MISMATCH",
+                "validated visual owner pack must produce ZIP",
+            )
+        return "full_resolution_stills_v1.zip"
+    return LEGACY_ARTIFACT_FILENAME(artifact_type, source)
+
 
 def finalize_receipt_chain(
     request: Mapping[str, Any],
@@ -61,16 +74,21 @@ def execute_finalized(
     clock=core.utc_now,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     selected_assembler = assembler or visual_adapter.assemble_owner_pack
-    registration, restore, manifest = core.execute_request(
-        request,
-        production_dir,
-        private_root,
-        receipt_dir,
-        resume_token=resume_token,
-        inject_failure_after_registration=inject_failure_after_registration,
-        assembler=selected_assembler,
-        clock=clock,
-    )
+    original_artifact_filename = core.artifact_filename
+    core.artifact_filename = exact_artifact_filename
+    try:
+        registration, restore, manifest = core.execute_request(
+            request,
+            production_dir,
+            private_root,
+            receipt_dir,
+            resume_token=resume_token,
+            inject_failure_after_registration=inject_failure_after_registration,
+            assembler=selected_assembler,
+            clock=clock,
+        )
+    finally:
+        core.artifact_filename = original_artifact_filename
     return finalize_receipt_chain(
         request,
         private_root.resolve(),
@@ -105,6 +123,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         core.sanitized_summary(registration, restore)
         print("VISUAL_OWNER_PACK_ADAPTER=PASS")
+        print("STILL_ARCHIVE_FORMAT=ZIP")
         print("RECEIPT_CHAIN_INTEGRITY=PASS")
         return 0
     except core.RetryableDeliveryError as exc:
