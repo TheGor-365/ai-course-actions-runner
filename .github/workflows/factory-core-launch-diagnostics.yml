@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [compile, day1, day2, day3, day4, day5, interface, binary, diff]
+        check: [compile, day1, day2, day3, day4, day5, interface, gold-s01, binary, diff]
     env:
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
     steps:
@@ -73,6 +73,7 @@ jobs:
                 11_tools/factory_core/day4_proofs.py \
                 11_tools/factory_core/state_registry_sync.py \
                 11_tools/factory_core/launch_hardening.py \
+                11_tools/factory_core/gold_s01_real.py \
                 11_tools/run_factory_core.py \
                 11_tools/test_factory_core.py \
                 11_tools/test_factory_core_day2.py \
@@ -80,6 +81,7 @@ jobs:
                 11_tools/test_factory_core_day4.py \
                 11_tools/test_factory_core_day5.py \
                 11_tools/test_factory_interface_adapter.py \
+                11_tools/test_factory_core_gold_s01_real.py \
                 >/dev/null 2>&1
               ;;
             day1)
@@ -100,9 +102,13 @@ jobs:
             interface)
               python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1
               ;;
+            gold-s01)
+              python3 11_tools/test_factory_core_gold_s01_real.py >/dev/null 2>&1
+              ;;
             binary)
               if find 04_validators/test_fixtures/factory_core \
                       05_orchestration/launch_5d/core_contracts \
+                      05_orchestration/gold_s01_closure/contracts \
                       11_tools/factory_core \
                       -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
                       | grep -q .; then
