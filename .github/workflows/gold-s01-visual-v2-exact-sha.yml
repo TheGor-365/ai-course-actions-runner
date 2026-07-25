@@ -18,7 +18,7 @@ jobs:
     env:
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
-      PRIVATE_SHA: 12b16de26386cbf0e7bf646cf7283495079f5dec
+      PRIVATE_SHA: 42d9a351f4085639fc0c0813ee9cef31cdbc0b37
       PRIVATE_PR: 349
       RUNNER_PR: 15
       STATUS_CONTEXT: public-runner/gold-s01/visual-v2-no-render
@@ -38,7 +38,7 @@ jobs:
           test -n "${PRIVATE_REPO_PAT:-}"
           test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
           test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
-          test "$PRIVATE_SHA" = "12b16de26386cbf0e7bf646cf7283495079f5dec"
+          test "$PRIVATE_SHA" = "42d9a351f4085639fc0c0813ee9cef31cdbc0b37"
           test "$PRIVATE_PR" = "349"
           test "$RUNNER_PR" = "15"
           echo "public_artifact_policy=none"
