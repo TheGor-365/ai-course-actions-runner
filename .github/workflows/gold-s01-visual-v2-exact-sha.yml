@@ -1,0 +1,130 @@
+name: Gold S01 Visual v2 Exact SHA
+on:
+  push:
+    branches:
+      - "repair/gold-s01-visual-v2-gate"
+    paths:
+      - ".github/workflows/gold-s01-visual-v2-exact-sha.yml"
+      - "scripts/gold_s01_visual_v2_gate.py"
+      - "tests/test_gold_s01_visual_v2_gate.py"
+permissions:
+  contents: read
+jobs:
+  exact-private-sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
+      PRIVATE_SHA: 12b16de26386cbf0e7bf646cf7283495079f5dec
+      PRIVATE_PR: 349
+      STATUS_CONTEXT: public-runner/gold-s01/visual-v2-no-render
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate policy tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/gold_s01_visual_v2_gate.py tests/test_gold_s01_visual_v2_gate.py
+          python3 -m unittest tests/test_gold_s01_visual_v2_gate.py
+      - name: Fixed policy guard
+        run: |
+          set -euo pipefail
+          test -n "${PRIVATE_REPO_PAT:-}"
+          test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
+          test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
+          test "$PRIVATE_SHA" = "12b16de26386cbf0e7bf646cf7283495079f5dec"
+          test "$PRIVATE_PR" = "349"
+          echo "public_artifact_policy=none"
+          echo "private_content_public_exposure=false"
+      - name: Write pending private status
+        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 visual v2 exact-SHA gate started" "$RUN_URL"
+      - name: Checkout exact private SHA
+        id: checkout
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/private-production"
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$TARGET" >/dev/null 2>&1
+          git -C "$TARGET" fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          OBSERVED="$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          test "$OBSERVED" = "$PRIVATE_SHA"
+          git -C "$TARGET" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          test "$(git -C "$TARGET" rev-parse HEAD)" = "$PRIVATE_SHA"
+          echo "private_dir=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Run exact Gold S01 visual gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          OUTPUT="$RUNNER_TEMP/gold-s01-visual-gate.txt"
+          python3 scripts/gold_s01_visual_v2_gate.py \
+            --private-dir "${{ steps.checkout.outputs.private_dir }}" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" > "$OUTPUT" 2>&1
+          RC=$?
+          cat "$OUTPUT"
+          RESULT="$(awk -F= '$1=="result"{print $2}' "$OUTPUT" | tail -n1)"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "result=${RESULT:-FAIL}" >> "$GITHUB_OUTPUT"
+          for key in test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
+            value="$(awk -F= -v key="$key" '$1==key{print $2}' "$OUTPUT" | tail -n1)"
+            echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
+          done
+          echo "summary_hash=$(sha256sum "$OUTPUT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Build sanitized receipt
+        if: ${{ always() }}
+        run: |
+          RECEIPT="$RUNNER_TEMP/receipt.md"
+          {
+            echo "## Gold S01 visual v2 exact-SHA gate"
+            echo
+            echo '```text'
+            echo "RUNNER_SHA=${{ github.sha }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "PRIVATE_PR=$PRIVATE_PR"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "TEST_COUNT=${{ steps.gate.outputs.test_count }}"
+            echo "SEMANTIC_UNITS=${{ steps.gate.outputs.semantic_units }}"
+            echo "SHOT_IR_COUNT=${{ steps.gate.outputs.shot_ir_count }}"
+            echo "SCENE_IR_COUNT=${{ steps.gate.outputs.scene_ir_count }}"
+            echo "ASSETS_MATERIALIZED=${{ steps.gate.outputs.assets_materialized }}"
+            echo "NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.no_render_manifest_sha256 }}"
+            echo "VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.visual_input_fingerprint }}"
+            echo "TYPESCRIPT_TYPECHECK=${{ steps.gate.outputs.typescript_typecheck }}"
+            echo "COMMITTED_PACKAGE=${{ steps.gate.outputs.committed_package }}"
+            echo "TIMING_BOUND=${{ steps.gate.outputs.timing_bound }}"
+            echo "FINAL_RENDER_AUTHORIZED=${{ steps.gate.outputs.final_render_authorized }}"
+            echo "SANITIZED_SUMMARY_HASH=${{ steps.gate.outputs.summary_hash }}"
+            echo "MEDIA_RENDERED=false"
+            echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$RECEIPT"
+          cat "$RECEIPT"
+      - name: Write receipt to private PR
+        if: ${{ always() }}
+        run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/receipt.md"
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
+            state=success; description="Gold S01 visual v2 exact-SHA gate passed"
+          else
+            state=failure; description="Gold S01 visual v2 exact-SHA gate failed"
+          fi
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$state" "$description" "$RUN_URL"
+      - name: Final assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          test "${{ steps.gate.outputs.result }}" = "PASS"
+          test "${{ steps.gate.outputs.exit_code }}" = "0"
+          echo "public_media_artifacts_created=false"
+          echo "private_content_public_exposure=false"
