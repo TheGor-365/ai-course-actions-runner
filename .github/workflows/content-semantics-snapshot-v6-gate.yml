@@ -8,6 +8,11 @@ on:
       - "requests/content_semantics_snapshot_request_v06.json"
       - "scripts/run_content_semantics_snapshot_v6_gate.sh"
       - ".github/workflows/content-semantics-snapshot-v6-gate.yml"
+  pull_request:
+    paths:
+      - "requests/content_semantics_snapshot_request_v06.json"
+      - "scripts/run_content_semantics_snapshot_v6_gate.sh"
+      - ".github/workflows/content-semantics-snapshot-v6-gate.yml"
   workflow_dispatch:
 
 permissions:
