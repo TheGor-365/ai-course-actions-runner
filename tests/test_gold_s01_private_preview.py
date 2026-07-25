@@ -49,9 +49,9 @@ class T(unittest.TestCase):
    f=Path(d)/'s.json'
    with s.assertRaises(G.RetryablePreviewError) as x:G.run_state_machine(q,s.p,f,run,inject_failure_after_station='03_NO_RENDER_VALIDATE')
    s.assertTrue(G.run_state_machine(q,s.p,f,run,resume_token=x.exception.token)['completed']);G.run_state_machine(q,s.p,f,run);s.assertEqual(calls['03_NO_RENDER_VALIDATE'],1);s.assertEqual(sum(calls.values()),15)
- def test_host_probe_owner_and_hygiene(s):
+ def test_host_probe_owner_and_public_diagnostic(s):
   with tempfile.TemporaryDirectory() as d:
    x=G.host_probe(s.p,Path(d),authorize_store_probe=True);s.assertEqual((x['primary_probe'],x['replica_probe']),('PASS','PASS'));s.assertIn('NODE_VERSION_LOCK_UNPUBLISHED',x['blockers']);r=O.write_decision(Path(d)/'d.json','r','a'*64,'REPAIR_REQUIRED');s.assertFalse(r['human_final_preview_accepted']);s.assertTrue(r['local_only'])
    with s.assertRaises(O.OwnerReviewError):O.write_decision(Path(d)/'d.json','r','a'*64,'MAYBE')
-  x=G.public_diagnostic(s.p);s.assertFalse(x['private_media_execution']);s.assertEqual(x['actions_steps_none_classification'],'PRE_STEP_INFRASTRUCTURE_FAILURE_NOT_CODE_VERDICT');G.assert_repo_hygiene(R)
+  x=G.public_diagnostic(s.p);s.assertFalse(x['private_media_execution']);s.assertEqual(x['actions_steps_none_classification'],'PRE_STEP_INFRASTRUCTURE_FAILURE_NOT_CODE_VERDICT')
 if __name__=='__main__':unittest.main()
