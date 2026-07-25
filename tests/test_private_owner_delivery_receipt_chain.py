@@ -1,21 +1,27 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
 CORE_SPEC = importlib.util.spec_from_file_location(
-    "private_owner_delivery_v1", ROOT / "scripts/private_owner_delivery_v1.py"
+    "private_owner_delivery_v1", SCRIPTS / "private_owner_delivery_v1.py"
 )
 CORE = importlib.util.module_from_spec(CORE_SPEC)
 assert CORE_SPEC.loader is not None
 CORE_SPEC.loader.exec_module(CORE)
+sys.modules["private_owner_delivery_v1"] = CORE
 
 WRAPPER_SPEC = importlib.util.spec_from_file_location(
     "run_private_owner_delivery_exact_v1",
-    ROOT / "scripts/run_private_owner_delivery_exact_v1.py",
+    SCRIPTS / "run_private_owner_delivery_exact_v1.py",
 )
 WRAPPER = importlib.util.module_from_spec(WRAPPER_SPEC)
 assert WRAPPER_SPEC.loader is not None
