@@ -47,8 +47,8 @@ jobs:
           expected = {
               'schema_version': 'PublicRunnerFactoryCoreRequest_v1',
               'private_repo': 'TheGor-365/ai-course-production-system',
-              'private_branch': 'launch/factory-core-5d',
-              'private_pr': 315,
+              'private_branch': 'launch/factory-core-day4-5d',
+              'private_pr': 322,
               'gate_id': 'FACTORY_CORE_LAUNCH_GATE',
               'status_context': 'public-runner/factory/core-launch',
               'artifact_policy': 'none',
@@ -159,10 +159,12 @@ jobs:
             echo "PRIVATE_REPO=$PRIVATE_REPO"
             echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
             echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "PRIVATE_PR=$PRIVATE_PR"
             echo "GATE_ID=$GATE_ID"
             echo "STATUS_CONTEXT=$STATUS_CONTEXT"
             echo "RESULT=$RESULT"
             echo "EXIT_CODE=$EXIT_CODE"
+            echo 'DAY4_SCOPE=replay+resume+restore+ru_de_ja_fit+blind_s02_start'
             echo 'PRIVATE_ACTIONS_GREEN=false'
             echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
             echo 'ARTIFACT_POLICY=none'
