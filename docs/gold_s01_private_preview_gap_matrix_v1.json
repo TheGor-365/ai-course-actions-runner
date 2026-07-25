@@ -1,0 +1,37 @@
+{
+  "schema_version": "GoldS01PrivatePreviewGapMatrix_v1",
+  "reference_cell": "M1_L01_S01_RU",
+  "profile_id": "M1_L01_S01_RU_GOLD_V2_PRIVATE_PREVIEW_V1",
+  "observed_runner_base": "f55ced2b2730052bb63ff8ac436e178eee37fae6",
+  "observed_production_integration": "55182b603527bf2fe019f01695beb728116de467",
+  "capabilities": {
+    "locked_linux_host_inventory": "PROBE_IMPLEMENTED_REAL_REPROBE_REQUIRED",
+    "node_lock": "BLOCKED_EXACT_VERSION_NOT_PUBLISHED",
+    "package_manager_lock": "PARTIAL_NPM_PACKAGE_LOCK_EXACT",
+    "remotion_runtime_lock": "PASS_PACKAGE_LOCK_REMOTION_4.0.489",
+    "chromium_browser_lock": "BLOCKED_EXACT_VERSION_AND_BINARY_HASH_NOT_PUBLISHED",
+    "ffmpeg_lock": "KNOWN_6.1.1-3ubuntu5_REAL_REPROBE_REQUIRED",
+    "ffprobe_lock": "KNOWN_6.1.1-3ubuntu5_REAL_REPROBE_REQUIRED",
+    "font_hashes": "BLOCKED_GOLD_V2_FONT_MANIFEST_NOT_PUBLISHED",
+    "disk_space_permissions": "PROBE_IMPLEMENTED_REAL_RESULT_REQUIRED",
+    "primary_store": "IMPLEMENTED_PROBE_REQUIRED_ON_LOCKED_HOST",
+    "replica_store": "IMPLEMENTED_PROBE_REQUIRED_ON_LOCKED_HOST",
+    "registration_restore": "IMPLEMENTED_SYNTHETIC_TEST_GREEN_REAL_RECEIPTS_ABSENT",
+    "failure_injection_resume": "IMPLEMENTED_SYNTHETIC_TEST_GREEN_REAL_RUN_ABSENT"
+  },
+  "accepted_input_blockers": [
+    "AUDIO_UNRESOLVED_ROWS_77",
+    "ACCEPTED_TIMING_CONTRACT_ABSENT",
+    "FINAL_RU_CAPTIONS_ABSENT",
+    "GOLD_V2_VISUAL_SUCCESSOR_HEAD_ABSENT",
+    "GOLD_V2_NO_RENDER_MANIFEST_ABSENT",
+    "GOLD_V2_PRODUCTION_ADAPTER_ABSENT"
+  ],
+  "actions_pre_step_failure_classification": "PRE_STEP_INFRASTRUCTURE_FAILURE_NOT_PRIVATE_MEDIA_OR_CODE_VERDICT",
+  "private_profile_implemented": true,
+  "request_validator_green": true,
+  "final_render_executed": false,
+  "public_media_artifacts_created": false,
+  "private_content_public_exposure": false,
+  "no_fake_green": true
+}
