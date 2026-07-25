@@ -1,0 +1,44 @@
+{
+  "schema_version": "private-owner-delivery-schemas-v1",
+  "schemas": {
+    "private_owner_delivery_request_v1": {
+      "type": "object",
+      "required": [
+        "schema_version", "request_id", "package_id", "channel_id", "profile_id",
+        "execution_authorized", "authorization_owner", "authorized_outputs",
+        "authorized_inputs", "private_artifact_relative_root", "idempotency_key",
+        "public_workflow_execution_allowed", "public_artifact_upload_allowed",
+        "private_content_public_exposure", "no_fake_green"
+      ]
+    },
+    "private_artifact_registration_receipt_v1": {
+      "type": "object",
+      "required": [
+        "schema_version", "request_id", "package_id", "channel_id", "idempotency_key",
+        "authorized_heads", "input_manifest_git_blob_sha", "registration_status",
+        "artifacts", "artifact_count", "owner_delivery_pointer", "auth_required",
+        "raw_private_paths_in_receipt", "private_content_public_exposure",
+        "public_artifacts_created", "completed_at", "receipt_hash", "no_fake_green"
+      ]
+    },
+    "private_artifact_restore_receipt_v1": {
+      "type": "object",
+      "required": [
+        "schema_version", "request_id", "registration_receipt_hash", "restore_status",
+        "verified_artifacts", "verified_artifact_count", "cleanup_status",
+        "raw_private_paths_in_receipt", "private_content_public_exposure",
+        "completed_at", "receipt_hash", "no_fake_green"
+      ]
+    },
+    "owner_delivery_manifest_v1": {
+      "type": "object",
+      "required": [
+        "schema_version", "factory_id", "request_id", "package_id", "channel_id",
+        "owner_delivery_pointer", "auth_required", "authorized_heads", "artifacts",
+        "registration_receipt_hash", "restore_receipt_hash", "human_decision",
+        "automatic_human_qc_green", "private_content_public_exposure",
+        "public_artifacts_created", "no_fake_green"
+      ]
+    }
+  }
+}
