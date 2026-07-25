@@ -52,7 +52,7 @@ class RunnerInfrastructureTests(unittest.TestCase):
     def test_contract_self_validator(self) -> None:
         out = self.run_cmd(sys.executable, "scripts/runner_infrastructure_v1.py", "validate-contract").stdout
         self.assertIn("result=PASS", out)
-        self.assertIn("manifest_gate_count=6", out)
+        self.assertIn("manifest_gate_count=7", out)
 
     def test_launch_control_plane_gate_positive(self) -> None:
         with tempfile.TemporaryDirectory() as td:

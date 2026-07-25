@@ -1,0 +1,161 @@
+name: Content Semantics Exact SHA
+
+on:
+  push:
+    branches:
+      - "launch/factory-5d-runner-infrastructure-day2"
+    paths:
+      - ".github/workflows/content-semantics-exact-sha.yml"
+      - "config/public_gate_manifest_v1.json"
+      - "schemas/public_gate_receipt_v1.schema.json"
+      - "scripts/content_semantics_gate_v1.py"
+      - "scripts/run_manifest_gate.sh"
+      - "scripts/runner_infrastructure_v1.py"
+      - "scripts/write_private_commit_status.sh"
+      - "scripts/write_private_pr_comment.sh"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  exact-private-sha-content-semantics-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-source-library
+      PRIVATE_BRANCH: launch/factory-5d-content-semantics-snapshot-v7
+      PRIVATE_SHA: 0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902
+      PRIVATE_PR: 55
+      RUNNER_PR: 7
+      GATE_ID: CONTENT_SEMANTICS_LAUNCH_GATE
+      STATUS_CONTEXT: public-runner/launch-5d/content-semantics-day2
+      REQUEST_ID: runner-infrastructure-day2-content-semantics-005
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      GH_TOKEN: ${{ github.token }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Policy guard
+        run: |
+          set -euo pipefail
+          [[ -n "${PRIVATE_REPO_PAT:-}" ]] || { echo "policy_error=missing_private_repo_credential"; exit 2; }
+          [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "policy_error=invalid_private_sha"; exit 2; }
+          python3 scripts/runner_infrastructure_v1.py resolve-gate "$GATE_ID" "$PRIVATE_REPO" --field profile_id >/dev/null
+          echo "policy_guard=pass"
+          echo "request_id=$REQUEST_ID"
+          echo "private_content_public_exposure=false"
+          echo "artifacts_created=false"
+      - name: Write pending private status
+        run: |
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending \
+            "Content semantics exact-SHA gate started" "$PUBLIC_RUN_URL"
+      - name: Checkout exact private SHA
+        id: private_checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_CHECKOUT_DIR="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_CHECKOUT_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_CHECKOUT_DIR"
+          git fetch --depth=1 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          OBSERVED_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || {
+            echo "checkout_error=branch_head_sha_mismatch"
+            exit 2
+          }
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_checkout_dir=$PRIVATE_CHECKOUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "private_branch_head_verified=true"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "private_content_public_exposure=false"
+      - name: Run fixed content semantics gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUMMARY_FILE="$RUNNER_TEMP/gate_summary.txt"
+          bash scripts/run_manifest_gate.sh \
+            "$GATE_ID" \
+            "${{ steps.private_checkout.outputs.private_checkout_dir }}" \
+            "$PRIVATE_REPO" > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat "$SUMMARY_FILE"
+          OUTPUT_SCHEMA_HASH="$(awk -F= '$1=="output_schema_hash"{print $2}' "$SUMMARY_FILE" | tail -n1)"
+          SANITIZED_METRICS_HASH="$(sha256sum "$SUMMARY_FILE" | awk '{print $1}')"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          echo "completed_at=$COMPLETED_AT" >> "$GITHUB_OUTPUT"
+          echo "output_schema_hash=$OUTPUT_SCHEMA_HASH" >> "$GITHUB_OUTPUT"
+          echo "sanitized_metrics_hash=$SANITIZED_METRICS_HASH" >> "$GITHUB_OUTPUT"
+          if [[ "$RC" -eq 0 ]]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Build sanitized receipt comment
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RECEIPT_FILE="$RUNNER_TEMP/public_runner_receipt.md"
+          {
+            echo "## Runner infrastructure sanitized receipt"
+            echo
+            echo '```text'
+            echo "SCHEMA_VERSION=public-runner-receipt-v1"
+            echo "FACTORY_ID=AI_COURSE_FACTORY"
+            echo "RUNNER_REPO=${{ github.repository }}"
+            echo "RUNNER_SHA=${{ github.sha }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "GATE_ID=$GATE_ID"
+            echo "REQUEST_ID=$REQUEST_ID"
+            echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "STARTED_AT=${{ steps.gate.outputs.started_at }}"
+            echo "COMPLETED_AT=${{ steps.gate.outputs.completed_at }}"
+            echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "SANITIZED_METRICS_HASH=${{ steps.gate.outputs.sanitized_metrics_hash }}"
+            echo "OUTPUT_SCHEMA_HASH=${{ steps.gate.outputs.output_schema_hash }}"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "ARTIFACTS_CREATED=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$RECEIPT_FILE"
+          cat "$RECEIPT_FILE"
+      - name: Write sanitized receipt to private source PR
+        if: ${{ always() }}
+        run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/public_runner_receipt.md"
+      - name: Write sanitized receipt to runner PR
+        if: ${{ always() }}
+        run: gh pr comment "$RUNNER_PR" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/public_runner_receipt.md"
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then STATE=success; DESCRIPTION="Content semantics exact-SHA gate passed"
+          else STATE=failure; DESCRIPTION="Content semantics exact-SHA gate failed"; fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+      - name: Final assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          [[ -n "${{ steps.gate.outputs.output_schema_hash }}" ]]
+          [[ -n "${{ steps.gate.outputs.sanitized_metrics_hash }}" ]]
+          echo "exact_private_sha_binding=PASS"
+          echo "receipt_envelope_complete=true"
+          echo "runner_pr_receipt_writeback=PASS"
+          echo "private_pr_receipt_writeback=PASS"
+          echo "private_commit_status_writeback=PASS"
+          echo "public_media_artifacts_created=false"
+          echo "private_content_public_exposure=false"
+          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]

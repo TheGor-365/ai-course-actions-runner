@@ -2,131 +2,89 @@
 
 ```text
 DOCUMENT_ID=FACTORY_RUNNER_AUTOMATION_BACKLOG_v01
-STATUS=ACTIVE_LAUNCH_5D_DAY1_IMPLEMENTATION
+STATUS=ACTIVE_LAUNCH_5D_DAY2
 FACTORY_ID=AI_COURSE_FACTORY
-OWNER_REPO=TheGor-365/ai-course-actions-runner
 NO_FAKE_AUTOMATION_CLAIMS=true
 ```
 
-## 1. Current proven implementation scope
+## 1. Proven implementation scope
 
 ```text
-EXACT_PRIVATE_SHA_CHECKOUT=existing
-PRIVATE_BRANCH_HEAD_VERIFICATION=existing
-PRIVATE_REPO_ALLOWLIST=manifest_and_workflow
-GATE_ID_ALLOWLIST=manifest_workflow_dispatcher_docs
-RUNNER_CONTRACT_SELF_VALIDATOR=implemented_pending_CI
-GENERIC_FIXED_GATE_MANIFEST=implemented_pending_CI
-FACTORY_LAUNCH_CONTROL_PLANE_GATE=implemented_pending_exact_SHA_dispatch
-PRIVATE_EXECUTOR_INTERFACE_V1=implemented_fixture_only
-ARTIFACT_POINTER_RECORD=implemented_fixture_only
-RESUME_RETRY=implemented_fixture_only
-BACKUP_RESTORE_SHA=implemented_fixture_only
+EXACT_PRIVATE_SHA_CHECKOUT=proven
+PRIVATE_BRANCH_HEAD_VERIFICATION=proven
+RUNNER_CONTRACT_SELF_VALIDATOR=proven
+GENERIC_FIXED_GATE_MANIFEST=proven
+FACTORY_LAUNCH_CONTROL_PLANE_GATE=proven_exact_SHA
+CONTENT_SEMANTICS_LAUNCH_GATE=implemented_pending_exact_SHA_result
+PRIVATE_EXECUTOR_INTERFACE_V1=fixture_only
+RESUME_RETRY=fixture_only
+BACKUP_RESTORE_SHA=fixture_only
 PUBLIC_BINARY_ARTIFACTS_DEFAULT_NONE=true
 ```
 
-## 2. Current capability limitations
+## 2. Limitations
 
 ```text
 GENERAL_PURPOSE_SHELL_ALLOWED=false
-DYNAMIC_VALIDATOR_PATH_INPUT_ALLOWED=false
 A3502_GATE_IMPLEMENTED=false
-EXACT_FONT_CONTAINER_IMAGE=false
-REMOTION_BROWSER_IMAGE=false
 PRIVATE_ARTIFACT_STORE_CONNECTION=false
 SELF_HOSTED_PRIVATE_RENDER_RUNNER=false
-MEDIA_ARTIFACT_POINTER_WRITEBACK=false
-PACKAGE_STATE_MACHINE=false
-BATCH_DISPATCH=false
 ACTUAL_S01_RETRY_RESUME=false
 ACTUAL_S01_BACKUP_RESTORE=false
 ```
 
 ## 3. Backlog
 
-### R01 — Runner contract self-validator
+### R01/R02 — Self-validator and fixed gate manifest
 
 ```text
-IMPLEMENTATION=scripts/runner_infrastructure_v1.py validate-contract
-STATUS=IMPLEMENTED_PENDING_GITHUB_ACTIONS
-ACCEPTANCE=workflow_manifest_dispatcher_contract_runbook_gate_sets_equal
+STATUS=PROVEN
 ```
 
-### R02 — Generic sanitized gate framework
+### R03 — A3502 no-render gate
 
 ```text
-IMPLEMENTATION=config/public_gate_manifest_v1.json+scripts/runner_infrastructure_v1.py resolve-gate
-STATUS=IMPLEMENTED_PENDING_GITHUB_ACTIONS
-ARBITRARY_COMMAND_INPUT=false
-```
-
-### R03 — A3502 no-render composition validation gate
-
-```text
-STATUS=BLOCKED_BY_LOCAL_PRIVATE_REFERENCE_PASS_AND_RUNTIME_LOCK
-PUBLIC_MEDIA=false
+STATUS=BLOCKED_BY_VISUAL_RUNTIME_REFERENCE_AND_RUNTIME_LOCK
 ```
 
 ### R04 — Production-side runner evidence consumer
 
 ```text
-STATUS=NOT_IMPLEMENTED
+STATUS=NEXT
 OWNER_REPO=TheGor-365/ai-course-production-system
 ```
 
-### R05 — Package state-machine dispatcher
+### R05 — Factory-core dispatcher consumption
 
 ```text
-STATUS=WAITING_FOR_FACTORY_CORE_STATION_ENVELOPE
+STATUS=INTERFACE_AVAILABLE_launch-core-v1
+NEXT=consume_real_station_envelope
 ```
 
-### R06 — Resume/retry controller
+### R06/R07/R08 — Retry, private executor and artifact pointer
 
 ```text
-FIXTURE_IMPLEMENTATION=scripts/runner_infrastructure_v1.py execute-fixture
-FIXTURE_STATUS=IMPLEMENTED_PENDING_CI
-ACTUAL_STATION_STATUS=NOT_PROVEN
+STATUS=FIXTURE_PROVEN_ACTUAL_HOST_PENDING
 ```
 
-### R07 — Self-hosted private executor
+### R09 — Blind package orchestration
 
 ```text
-SCHEMAS=schemas/private_executor_v1.schemas.json#private_executor_request_v1,schemas/private_executor_v1.schemas.json#private_executor_receipt_v1
-FIXED_PROFILE=config/private_executor_profiles_v1.json
-FIXTURE_STATUS=IMPLEMENTED_NON_MEDIA_ONLY
-SELF_HOSTED_MEDIA_STATUS=NOT_CONNECTED
-```
-
-### R08 — Artifact pointer writeback
-
-```text
-SCHEMA=schemas/private_executor_v1.schemas.json#artifact_pointer_record_v1
-FIXTURE_RECEIPT=IMPLEMENTED_PRIVATE_FILE_ONLY
-PRODUCTION_REGISTRY_CALLBACK=NOT_IMPLEMENTED
-```
-
-### R09 — Batch package orchestrator
-
-```text
-STATUS=NOT_IMPLEMENTED
+STATUS=WAITING_FOR_REAL_STATION_OUTPUTS
 ```
 
 ### R10 — Cross-repository synchronization validator
 
 ```text
-STATUS=NOT_IMPLEMENTED
-KNOWN_BLOCKER=production_integration_branch_diverged_from_main
+STATUS=NEXT
 ```
 
 ## 4. Required next evidence
 
 ```text
-RUNNER_SELF_TEST_WORKFLOW=PASS
-FACTORY_LAUNCH_CONTROL_PLANE_GATE_EXACT_SHA_RUN=PASS
-PRIVATE_EXECUTOR_FIXTURE_CI=PASS
+CONTENT_SEMANTICS_EXACT_SHA_GATE=PASS
 PRODUCTION_EVIDENCE_CONSUMER=PASS
+ALIGNMENT_PROVISIONING_RESUME_FIXTURE=PASS
+CROSS_REPO_SYNC_GATE=PASS
 ACTUAL_PRIVATE_ARTIFACT_STORE_CONNECTION=PASS
-ACTUAL_S01_RESUME_RESTORE=PASS
 ```
-
-No fixture result is production GREEN.

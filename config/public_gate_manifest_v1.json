@@ -76,6 +76,23 @@
         "production_green",
         "release_green"
       ]
+    },
+    "CONTENT_SEMANTICS_LAUNCH_GATE": {
+      "profile_id": "content_semantics_launch_v1",
+      "handler_id": "builtin:CONTENT_SEMANTICS_LAUNCH_GATE",
+      "allowed_repositories": [
+        "TheGor-365/ai-course-source-library"
+      ],
+      "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
+      "validation_strength": "bounded_content_semantics_build_and_contract_matrix",
+      "media": false,
+      "non_claims": [
+        "resolved_ShotIR",
+        "measured_timestamps",
+        "audio_production_green",
+        "render_green",
+        "release_green"
+      ]
     }
   }
 }
