@@ -31,6 +31,10 @@ case "$GATE_ID" in
     python3 "$ROOT/scripts/content_semantics_gate_v1.py" --private-dir "$PRIVATE_DIR"
     RC=$?
     ;;
+  PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE)
+    python3 "$ROOT/scripts/production_evidence_consumer_gate_v1.py" "$PRIVATE_DIR"
+    RC=$?
+    ;;
   *)
     bash "$ROOT/scripts/run_allowlisted_validator.sh" "$GATE_ID" "$PRIVATE_DIR"
     RC=$?

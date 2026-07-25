@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT_ID=PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01
-STATUS=ACTIVE_LAUNCH_5D_DAY2
+STATUS=ACTIVE_LAUNCH_5D_DAY2_EVIDENCE_CONSUMER
 NO_FAKE_GREEN=true
 ```
 
@@ -44,6 +44,7 @@ PUBLIC_ARTIFACTS_EXPECTED=none
 | `A3480_SCRIPT_FIT_PACK_LOCAL_GATE` | production | bounded text contract | text-only |
 | `FACTORY_LAUNCH_CONTROL_PLANE_GATE` | production | launch metadata | Day 1 |
 | `CONTENT_SEMANTICS_LAUNCH_GATE` | source | fixed build and validation matrix | Day 2 source handoff |
+| `PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE` | production | receipt consumer tests and actual receipt validation | Day 2 evidence intake |
 
 ## 6. Content semantics gate
 
@@ -55,7 +56,11 @@ Module 1/Lesson 1/launch_5d/content_semantics/HANDOFF_v1.json
 
 The gate compiles fixed scripts, runs the source-owned tests/builders/validators, rebuilds the immutable S02 request, and emits only counts and hashes. Failure output is represented by a fixed step ID and diagnostic hash; raw private validator output is not printed.
 
-## 7. Non-claims
+## 7. Production receipt consumer gate
+
+The gate executes the production-owned fail-closed validator and its negative tests against the exact production PR SHA. It validates the registered sanitized receipt from content snapshot v7 and does not mutate production authority by itself.
+
+## 8. Non-claims
 
 ```text
 FINAL_SHOTIR=false
@@ -66,11 +71,11 @@ PRODUCTION_GREEN=false
 RELEASE_GREEN=false
 ```
 
-## 8. Private executor fixture
+## 9. Private executor fixture
 
 Fixture evidence remains interface-only. It is not actual S01 execution.
 
-## 9. Acceptance criteria
+## 10. Acceptance criteria
 
 ```text
 POLICY_GUARD_RAN=true
@@ -84,6 +89,6 @@ PUBLIC_ARTIFACTS_CREATED=false
 NO_FAKE_GREEN=true
 ```
 
-## 10. Production consumption
+## 11. Production consumption
 
-Production must validate runner SHA, run ID, private SHA, gate ID, request ID, status context, result, exit code and output schema hash before bounded writeback.
+Production must validate runner SHA, run ID, job ID, private SHA, gate ID, request ID, status context, result, exit code, metrics hash, output schema hash and private commit-status identity before bounded writeback.

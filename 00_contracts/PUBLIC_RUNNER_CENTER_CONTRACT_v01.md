@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT_ID=PUBLIC_RUNNER_CENTER_CONTRACT_v01
-STATUS=ACTIVE_LAUNCH_5D_DAY2_CONTENT_SEMANTICS_GATE
+STATUS=ACTIVE_LAUNCH_5D_DAY2_EVIDENCE_CONSUMER_GATE
 FACTORY_ID=AI_COURSE_FACTORY
 REPO=TheGor-365/ai-course-actions-runner
 ROLE=execution_only_machine_shop
@@ -57,13 +57,14 @@ M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET
 A3480_SCRIPT_FIT_PACK_LOCAL_GATE
 FACTORY_LAUNCH_CONTROL_PLANE_GATE
 CONTENT_SEMANTICS_LAUNCH_GATE
+PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE
 ```
 
 ## 7. Current factory stage and non-claims
 
 ```text
-CONTENT_SEMANTICS_LAUNCH_GATE=bounded_fixed_build_and_contract_matrix
-CONTENT_SEMANTICS_PRIVATE_REPO=TheGor-365/ai-course-source-library
+CONTENT_SEMANTICS_LAUNCH_GATE=exact_SHA_proven_snapshot_v7
+PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE=bounded_consumer_code_and_actual_receipt_validation
 CONTENT_SEMANTICS_PUBLIC_ARTIFACTS=false
 CONTENT_SEMANTICS_PRIVATE_LOGS_PUBLIC=false
 RESOLVED_SHOTIR_CLAIM=false
@@ -79,9 +80,9 @@ PUBLIC_MEDIA_RENDER_ALLOWED=false
 
 Workflow, manifest, dispatcher, contract and runbook gate sets must be equal. `validate-contract` fails closed on drift.
 
-## 9. Private executor interface v1
+## 9. Private executor and provisioning
 
-The non-media fixture proves request/receipt mechanics, idempotency, retry/resume, pointer-only output and SHA restore. Actual media host and artifact store remain external and unproven.
+The non-media executor fixture proves request/receipt mechanics, idempotency, retry/resume, pointer-only output and SHA restore. The locked alignment-model profile proves interrupted transfer resume and checksum on fixtures. Actual media host, actual model download and artifact store remain external and unproven.
 
 ## 10. Artifact policy
 
@@ -99,7 +100,11 @@ PRIVATE_POINTER_IN_PUBLIC_LOGS=false
 RUNNER_CONTRACT_SELF_VALIDATOR=implemented
 GENERIC_FIXED_GATE_MANIFEST=implemented
 FACTORY_LAUNCH_CONTROL_PLANE_GATE=exact_SHA_proven
-CONTENT_SEMANTICS_LAUNCH_GATE=implemented_pending_exact_SHA_result
+CONTENT_SEMANTICS_LAUNCH_GATE=exact_SHA_proven
+SANITIZED_RECEIPT_TRANSPORT=proven
+PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE=implemented_pending_exact_SHA_result
+ALIGNMENT_MODEL_RESUME=fixture_proven_actual_download_pending
+CROSS_REPO_DRIFT_VALIDATOR=fixture_proven_and_live_drift_observed
 PRIVATE_EXECUTOR_INTERFACE_V1=fixture_only
-DAY2_STATUS=YELLOW_UNTIL_REAL_SOURCE_GATE_AND_ACTUAL_STATION_EXECUTION
+DAY2_STATUS=YELLOW_UNTIL_ACTUAL_CONSUMER_GATE_AND_REAL_PRIVATE_EXECUTOR
 ```

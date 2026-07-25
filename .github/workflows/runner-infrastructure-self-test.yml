@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - "launch/factory-5d-runner-infrastructure-day2"
+      - "launch/factory-5d-runner-infrastructure-day2-consumer"
     paths:
       - ".github/workflows/**"
       - "config/**"

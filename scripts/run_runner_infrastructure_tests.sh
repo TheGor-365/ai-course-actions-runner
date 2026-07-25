@@ -6,6 +6,7 @@ bash -n scripts/run_manifest_gate.sh
 python3 -m py_compile \
   scripts/runner_infrastructure_v1.py \
   scripts/content_semantics_gate_v1.py \
+  scripts/production_evidence_consumer_gate_v1.py \
   scripts/alignment_model_provisioning_v1.py \
   scripts/validate_cross_repo_sync_v1.py \
   tests/test_runner_infrastructure.py \
