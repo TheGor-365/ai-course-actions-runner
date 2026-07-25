@@ -54,7 +54,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--private-dir", required=True); parser.add_argument("--private-repo", required=True); parser.add_argument("--private-branch", required=True); parser.add_argument("--private-sha", required=True); args = parser.parse_args(argv)
     try: result = execute(Path(args.private_dir), args.private_repo, args.private_branch, args.private_sha)
     except GateError as exc:
-        print(f"result=FAIL\nerror_code={exc.code}\ndiagnostic_hash={hash_text(exc.detail)}\nno_fake_green=true"); return 1
+        safe_detail = exc.detail.replace("\n", " ").replace("\r", " ")[:300]
+        print(f"result=FAIL\nerror_code={exc.code}\nerror_detail={safe_detail}\ndiagnostic_hash={hash_text(exc.detail)}\nno_fake_green=true"); return 1
     for key, value in result.items(): print(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
     return 0
 if __name__ == "__main__": raise SystemExit(main())
