@@ -12,10 +12,7 @@
     "FACTORY_PUBLIC_RUNNER_SMOKE": {
       "profile_id": "factory_public_runner_smoke",
       "handler_id": "builtin:FACTORY_PUBLIC_RUNNER_SMOKE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system",
-        "TheGor-365/ai-course-source-library"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system", "TheGor-365/ai-course-source-library"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "connectivity_exact_sha_smoke",
       "media": false
@@ -23,9 +20,7 @@
     "A3479_CONTENT_ONLY_LOCAL_GATE": {
       "profile_id": "a3479_content_only_local",
       "handler_id": "builtin:A3479_CONTENT_ONLY_LOCAL_GATE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "bounded_contract_validator",
       "media": false
@@ -33,9 +28,7 @@
     "A3479_CI_SCOPE_GUARD_DOC_GATE": {
       "profile_id": "a3479_ci_scope_guard_doc",
       "handler_id": "builtin:A3479_CI_SCOPE_GUARD_DOC_GATE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "inventory_only_not_production_green",
       "media": false
@@ -43,10 +36,7 @@
     "M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET": {
       "profile_id": "m1_l01_import_validators_safe_subset",
       "handler_id": "builtin:M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system",
-        "TheGor-365/ai-course-source-library"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system", "TheGor-365/ai-course-source-library"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "count_only_smoke",
       "media": false
@@ -54,9 +44,7 @@
     "A3480_SCRIPT_FIT_PACK_LOCAL_GATE": {
       "profile_id": "a3480_script_fit_pack_local",
       "handler_id": "builtin:A3480_SCRIPT_FIT_PACK_LOCAL_GATE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "bounded_text_contract_validator",
       "media": false
@@ -64,35 +52,29 @@
     "FACTORY_LAUNCH_CONTROL_PLANE_GATE": {
       "profile_id": "factory_launch_control_plane_metadata_v1",
       "handler_id": "builtin:FACTORY_LAUNCH_CONTROL_PLANE_GATE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-production-system"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-production-system"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "bounded_launch_control_plane_metadata",
       "media": false,
-      "non_claims": [
-        "A3502_support",
-        "media_render",
-        "production_green",
-        "release_green"
-      ]
+      "non_claims": ["A3502_support", "media_render", "production_green", "release_green"]
     },
     "CONTENT_SEMANTICS_LAUNCH_GATE": {
       "profile_id": "content_semantics_launch_v1",
       "handler_id": "builtin:CONTENT_SEMANTICS_LAUNCH_GATE",
-      "allowed_repositories": [
-        "TheGor-365/ai-course-source-library"
-      ],
+      "allowed_repositories": ["TheGor-365/ai-course-source-library"],
       "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
       "validation_strength": "bounded_content_semantics_build_and_contract_matrix",
       "media": false,
-      "non_claims": [
-        "resolved_ShotIR",
-        "measured_timestamps",
-        "audio_production_green",
-        "render_green",
-        "release_green"
-      ]
+      "non_claims": ["resolved_ShotIR", "measured_timestamps", "audio_production_green", "render_green", "release_green"]
+    },
+    "PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE": {
+      "profile_id": "production_runner_evidence_consumer_v1",
+      "handler_id": "builtin:PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE",
+      "allowed_repositories": ["TheGor-365/ai-course-production-system"],
+      "output_schema_file": "schemas/public_gate_receipt_v1.schema.json",
+      "validation_strength": "bounded_production_receipt_consumer_and_actual_receipt_validation",
+      "media": false,
+      "non_claims": ["production_green", "release_green", "media_execution"]
     }
   }
 }
