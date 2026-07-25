@@ -71,7 +71,7 @@ jobs:
           RC=$?
           cat "$OUTPUT"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
-          for key in result error_code error_detail diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized; do
+          for key in result error_code error_detail diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized actual_asset_registry_sha256 actual_component_source_sha256 actual_no_render_manifest_sha256 actual_private_render_request_sha256 actual_representative_source_sha256 actual_runtime_source_sha256 actual_scene_ir_sha256 actual_shot_ir_sha256 actual_visual_input_fingerprint; do
             value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
             echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
           done
@@ -105,6 +105,15 @@ jobs:
             echo "COMMITTED_PACKAGE=${{ steps.gate.outputs.committed_package }}"
             echo "TIMING_BOUND=${{ steps.gate.outputs.timing_bound }}"
             echo "FINAL_RENDER_AUTHORIZED=${{ steps.gate.outputs.final_render_authorized }}"
+            echo "ACTUAL_COMPONENT_SOURCE_SHA256=${{ steps.gate.outputs.actual_component_source_sha256 }}"
+            echo "ACTUAL_RUNTIME_SOURCE_SHA256=${{ steps.gate.outputs.actual_runtime_source_sha256 }}"
+            echo "ACTUAL_REPRESENTATIVE_SOURCE_SHA256=${{ steps.gate.outputs.actual_representative_source_sha256 }}"
+            echo "ACTUAL_ASSET_REGISTRY_SHA256=${{ steps.gate.outputs.actual_asset_registry_sha256 }}"
+            echo "ACTUAL_SHOT_IR_SHA256=${{ steps.gate.outputs.actual_shot_ir_sha256 }}"
+            echo "ACTUAL_SCENE_IR_SHA256=${{ steps.gate.outputs.actual_scene_ir_sha256 }}"
+            echo "ACTUAL_NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.actual_no_render_manifest_sha256 }}"
+            echo "ACTUAL_VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.actual_visual_input_fingerprint }}"
+            echo "ACTUAL_PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.actual_private_render_request_sha256 }}"
             echo "SANITIZED_SUMMARY_HASH=${{ steps.gate.outputs.summary_hash }}"
             echo "MEDIA_RENDERED=false"
             echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
@@ -120,6 +129,41 @@ jobs:
       - name: Write diagnostic receipt to runner PR
         if: ${{ always() }}
         run: gh pr comment "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/receipt.md"
+      - name: Refresh runner PR diagnostic body
+        if: ${{ always() }}
+        run: |
+          BODY="$RUNNER_TEMP/runner-pr-body.md"
+          {
+            echo "## Exact private target"
+            echo
+            echo '```text'
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "PRIVATE_PR=$PRIVATE_PR"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
+            echo "ACTUAL_COMPONENT_SOURCE_SHA256=${{ steps.gate.outputs.actual_component_source_sha256 }}"
+            echo "ACTUAL_RUNTIME_SOURCE_SHA256=${{ steps.gate.outputs.actual_runtime_source_sha256 }}"
+            echo "ACTUAL_REPRESENTATIVE_SOURCE_SHA256=${{ steps.gate.outputs.actual_representative_source_sha256 }}"
+            echo "ACTUAL_ASSET_REGISTRY_SHA256=${{ steps.gate.outputs.actual_asset_registry_sha256 }}"
+            echo "ACTUAL_SHOT_IR_SHA256=${{ steps.gate.outputs.actual_shot_ir_sha256 }}"
+            echo "ACTUAL_SCENE_IR_SHA256=${{ steps.gate.outputs.actual_scene_ir_sha256 }}"
+            echo "ACTUAL_NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.actual_no_render_manifest_sha256 }}"
+            echo "ACTUAL_VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.actual_visual_input_fingerprint }}"
+            echo "ACTUAL_PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.actual_private_render_request_sha256 }}"
+            echo "TIMING_BOUND=false"
+            echo "FINAL_RENDER_AUTHORIZED=false"
+            echo "MEDIA_RENDERED=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+            echo
+            echo "Fixed execution-only gate. It verifies exact checkout, 36 Python tests, committed ShotIR/SceneIR identities, full Remotion TypeScript typecheck, and binary-media prohibition. A PASS is not timing acceptance, render completion, Human Owner acceptance, production GREEN, or release GREEN."
+          } > "$BODY"
+          gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
       - name: Write final private status
         if: ${{ always() }}
         run: |
