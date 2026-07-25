@@ -10,8 +10,8 @@ EXPECTED_PR = 349
 EXPECTED_NO_RENDER = "e71157aa5cf3d43281fb274ebad41fbc082716e94bc37f9ef534ae5d42b5d109"
 EXPECTED_FINGERPRINT = "5d6d4c194b363571a504ef35a3bd00d767fcd53241dd6cb683ae36867a3253f4"
 class GateError(ValueError):
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(f"{code}:{detail}"); self.code = code; self.detail = detail
+    def __init__(self, code: str, detail: str, metadata: Mapping[str, Any] | None = None) -> None:
+        super().__init__(f"{code}:{detail}"); self.code = code; self.detail = detail; self.metadata = dict(metadata or {})
 def hash_text(text: str) -> str: return hashlib.sha256(text.encode()).hexdigest()
 def run(cmd: Sequence[str], cwd: Path, code: str = "COMMAND_FAILED", env: Mapping[str, str] | None = None) -> str:
     done = subprocess.run(list(cmd), cwd=cwd, env=dict(env) if env else None, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
@@ -30,10 +30,7 @@ def validate_summary(summary: Mapping[str, Any], package: bool = False, metadata
         expected.update({"semantic_units": 13, "test_count": 36, "assets_materialized": 18, "unresolved_assets": 0, "representative_qc_pack_ready": True, "private_render_request_ready": True, "full_visual_master_rendered": False, "human_final_preview_accepted": False})
     mismatches = [f"{key}:{summary.get(key)!r}!={value!r}" for key, value in expected.items() if summary.get(key) != value]
     if mismatches:
-        detail = ";".join(mismatches)
-        if metadata:
-            detail += ";actual_metadata=" + json.dumps(dict(metadata), sort_keys=True, separators=(",", ":"))
-        raise GateError("SUMMARY_MISMATCH", detail)
+        raise GateError("SUMMARY_MISMATCH", ";".join(mismatches), metadata)
 def validate_args(repo: str, branch: str, sha: str) -> None:
     if repo != EXPECTED_REPO: raise GateError("REPO_MISMATCH", repo)
     if branch != EXPECTED_BRANCH: raise GateError("BRANCH_MISMATCH", branch)
@@ -75,8 +72,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--private-dir", required=True); parser.add_argument("--private-repo", required=True); parser.add_argument("--private-branch", required=True); parser.add_argument("--private-sha", required=True); args = parser.parse_args(argv)
     try: result = execute(Path(args.private_dir), args.private_repo, args.private_branch, args.private_sha)
     except GateError as exc:
-        safe_detail = exc.detail.replace("\n", " ").replace("\r", " ")[:1600]
-        print(f"result=FAIL\nerror_code={exc.code}\nerror_detail={safe_detail}\ndiagnostic_hash={hash_text(exc.detail)}\nno_fake_green=true"); return 1
+        safe_detail = exc.detail.replace("\n", " ").replace("\r", " ")[:500]
+        print(f"result=FAIL\nerror_code={exc.code}\nerror_detail={safe_detail}\ndiagnostic_hash={hash_text(exc.detail)}")
+        for key, value in sorted(exc.metadata.items()): print(f"actual_{key}={value}")
+        print("no_fake_green=true"); return 1
     for key, value in result.items(): print(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
     return 0
 if __name__ == "__main__": raise SystemExit(main())
