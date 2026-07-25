@@ -1,0 +1,28 @@
+{
+  "schema_version": "private-owner-delivery-profiles-v1",
+  "public_workflow_execution_allowed": false,
+  "public_artifact_upload_allowed": false,
+  "executor_entrypoint": "scripts/run_private_owner_delivery_exact_v1.py",
+  "direct_internal_module_cli_authoritative": false,
+  "profiles": {
+    "OWNER_DELIVERY_EXISTING_STILLS_V1": {
+      "private_host_only": true,
+      "input_kind": "existing_exact_17_png_stills",
+      "generated_artifact_types": ["contact_sheet", "still_archive"],
+      "required_input_count": 17,
+      "accepted_timing_required": false,
+      "media_render_allowed": false,
+      "fixed_assembler": "production_visual_runtime_review_pack_v1",
+      "cleanup_policy": "private_owner_delivery_cleanup_v1"
+    },
+    "OWNER_DELIVERY_EXISTING_MEDIA_V1": {
+      "private_host_only": true,
+      "input_kind": "preexisting_exact_authorized_media",
+      "generated_artifact_types": [],
+      "adoptable_artifact_types": ["cross_scene_clip", "RU_preview"],
+      "accepted_timing_required": true,
+      "media_render_allowed": false,
+      "cleanup_policy": "private_owner_delivery_cleanup_v1"
+    }
+  }
+}
