@@ -32,6 +32,7 @@ on:
           - A3480_SCRIPT_FIT_PACK_LOCAL_GATE
           - FACTORY_LAUNCH_CONTROL_PLANE_GATE
           - CONTENT_SEMANTICS_LAUNCH_GATE
+          - PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE
       request_id:
         description: Stable request id
         required: true
@@ -91,7 +92,7 @@ jobs:
             *) echo "policy_error=repo_not_allowlisted"; exit 2 ;;
           esac
           case "$GATE_ID" in
-            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET|A3480_SCRIPT_FIT_PACK_LOCAL_GATE|FACTORY_LAUNCH_CONTROL_PLANE_GATE|CONTENT_SEMANTICS_LAUNCH_GATE) ;;
+            FACTORY_PUBLIC_RUNNER_SMOKE|A3479_CONTENT_ONLY_LOCAL_GATE|A3479_CI_SCOPE_GUARD_DOC_GATE|M1_L01_IMPORT_VALIDATORS_SAFE_SUBSET|A3480_SCRIPT_FIT_PACK_LOCAL_GATE|FACTORY_LAUNCH_CONTROL_PLANE_GATE|CONTENT_SEMANTICS_LAUNCH_GATE|PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE) ;;
             *) echo "policy_error=gate_not_allowlisted"; exit 2 ;;
           esac
           [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "policy_error=private_sha_must_be_full_40_hex"; exit 2; }
