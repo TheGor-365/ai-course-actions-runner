@@ -2,6 +2,8 @@
   "schema_version": "private-owner-delivery-profiles-v1",
   "public_workflow_execution_allowed": false,
   "public_artifact_upload_allowed": false,
+  "executor_entrypoint": "scripts/run_private_owner_delivery_exact_v1.py",
+  "direct_internal_module_cli_authoritative": false,
   "profiles": {
     "OWNER_DELIVERY_EXISTING_STILLS_V1": {
       "private_host_only": true,
