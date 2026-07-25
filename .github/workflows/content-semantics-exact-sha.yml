@@ -23,10 +23,10 @@ jobs:
     env:
       PRIVATE_REPO: TheGor-365/ai-course-source-library
       PRIVATE_BRANCH: launch/factory-5d-content-semantics
-      PRIVATE_SHA: 4175b9ad01f0a92269600fc180fdd259e256f799
+      PRIVATE_SHA: 0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902
       GATE_ID: CONTENT_SEMANTICS_LAUNCH_GATE
       STATUS_CONTEXT: public-runner/launch-5d/content-semantics-day2
-      REQUEST_ID: runner-infrastructure-day2-content-semantics-001
+      REQUEST_ID: runner-infrastructure-day2-content-semantics-002
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -89,11 +89,7 @@ jobs:
           echo "completed_at=$COMPLETED_AT" >> "$GITHUB_OUTPUT"
           echo "output_schema_hash=$OUTPUT_SCHEMA_HASH" >> "$GITHUB_OUTPUT"
           echo "sanitized_metrics_hash=$SANITIZED_METRICS_HASH" >> "$GITHUB_OUTPUT"
-          if [[ "$RC" -eq 0 ]]; then
-            echo "result=PASS" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=FAIL" >> "$GITHUB_OUTPUT"
-          fi
+          if [[ "$RC" -eq 0 ]]; then echo "result=PASS" >> "$GITHUB_OUTPUT"; else echo "result=FAIL" >> "$GITHUB_OUTPUT"; fi
           exit 0
       - name: Emit sanitized receipt envelope
         if: ${{ always() }}
@@ -124,13 +120,8 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
-            STATE=success
-            DESCRIPTION="Content semantics exact-SHA gate passed"
-          else
-            STATE=failure
-            DESCRIPTION="Content semantics exact-SHA gate failed"
-          fi
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then STATE=success; DESCRIPTION="Content semantics exact-SHA gate passed"
+          else STATE=failure; DESCRIPTION="Content semantics exact-SHA gate failed"; fi
           bash scripts/write_private_commit_status.sh \
             "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
             "$DESCRIPTION" "$PUBLIC_RUN_URL"
