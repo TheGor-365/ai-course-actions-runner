@@ -13,10 +13,10 @@ class GateError(ValueError):
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(f"{code}:{detail}"); self.code = code; self.detail = detail
 def hash_text(text: str) -> str: return hashlib.sha256(text.encode()).hexdigest()
-def run(cmd: Sequence[str], cwd: Path) -> str:
-    done = subprocess.run(list(cmd), cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+def run(cmd: Sequence[str], cwd: Path, code: str = "COMMAND_FAILED", env: Mapping[str, str] | None = None) -> str:
+    done = subprocess.run(list(cmd), cwd=cwd, env=dict(env) if env else None, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if done.returncode:
-        raise GateError("COMMAND_FAILED", f"{cmd[0]}:{done.returncode}:out={hash_text(done.stdout)}:err={hash_text(done.stderr)}")
+        raise GateError(code, f"rc={done.returncode}:out={hash_text(done.stdout)}:err={hash_text(done.stderr)}")
     return done.stdout
 def last_json(text: str) -> dict[str, Any]:
     for line in reversed(text.splitlines()):
@@ -37,19 +37,16 @@ def validate_args(repo: str, branch: str, sha: str) -> None:
 def execute(private_dir: Path, repo: str, branch: str, sha: str) -> dict[str, Any]:
     validate_args(repo, branch, sha)
     if not (private_dir / ".git").is_dir(): raise GateError("CHECKOUT_MISSING", str(private_dir))
-    observed = run(["git", "rev-parse", "HEAD"], private_dir).strip()
+    observed = run(["git", "rev-parse", "HEAD"], private_dir, "GIT_HEAD_FAILED").strip()
     if observed != EXPECTED_SHA: raise GateError("CHECKOUT_SHA_MISMATCH", observed)
-    if run(["git", "status", "--porcelain"], private_dir).strip(): raise GateError("CHECKOUT_DIRTY", "true")
-    run([sys.executable, "-m", "py_compile", "11_tools/render_factory/gold_s01_visual_v2/__init__.py", "11_tools/render_factory/gold_s01_visual_v2/blueprint.py", "11_tools/render_factory/gold_s01_visual_v2/core.py", "11_tools/render_factory/gold_s01_visual_v2/ir.py", "11_tools/render_factory/gold_s01_visual_v2/qc.py", "11_tools/render_factory/gold_s01_visual_v2/handoffs.py", "11_tools/render_factory/gold_s01_visual_v2/compiler.py", "11_tools/render_factory/gold_s01_visual_v2/tests/test_gold_s01_visual_v2.py", "04_validators/render/validate_gold_s01_visual_v2.py", "04_validators/render/validate_gold_s01_visual_v2_package.py"], private_dir)
+    if run(["git", "status", "--porcelain"], private_dir, "GIT_STATUS_FAILED").strip(): raise GateError("CHECKOUT_DIRTY", "true")
+    run([sys.executable, "-m", "py_compile", "11_tools/render_factory/gold_s01_visual_v2/__init__.py", "11_tools/render_factory/gold_s01_visual_v2/blueprint.py", "11_tools/render_factory/gold_s01_visual_v2/core.py", "11_tools/render_factory/gold_s01_visual_v2/ir.py", "11_tools/render_factory/gold_s01_visual_v2/qc.py", "11_tools/render_factory/gold_s01_visual_v2/handoffs.py", "11_tools/render_factory/gold_s01_visual_v2/compiler.py", "11_tools/render_factory/gold_s01_visual_v2/tests/test_gold_s01_visual_v2.py", "04_validators/render/validate_gold_s01_visual_v2.py", "04_validators/render/validate_gold_s01_visual_v2_package.py"], private_dir, "PYTHON_COMPILE_FAILED")
     env = os.environ.copy(); env["PYTHONPATH"] = "11_tools/render_factory"
-    def run_env(cmd: Sequence[str], cwd: Path) -> str:
-        done = subprocess.run(list(cmd), cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        if done.returncode: raise GateError("COMMAND_FAILED", f"{cmd[0]}:{done.returncode}:out={hash_text(done.stdout)}:err={hash_text(done.stderr)}")
-        return done.stdout
-    no_render = last_json(run_env([sys.executable, "04_validators/render/validate_gold_s01_visual_v2.py"], private_dir)); validate_summary(no_render)
-    package = last_json(run_env([sys.executable, "04_validators/render/validate_gold_s01_visual_v2_package.py"], private_dir)); validate_summary(package, package=True)
+    no_render = last_json(run([sys.executable, "04_validators/render/validate_gold_s01_visual_v2.py"], private_dir, "NO_RENDER_VALIDATOR_FAILED", env)); validate_summary(no_render)
+    package = last_json(run([sys.executable, "04_validators/render/validate_gold_s01_visual_v2_package.py"], private_dir, "PACKAGE_VALIDATOR_FAILED", env)); validate_summary(package, package=True)
     remotion = private_dir / "11_tools/render_factory/remotion"
-    run(["npm", "ci"], remotion); run(["npm", "run", "typecheck"], remotion)
+    run(["npm", "ci"], remotion, "NPM_CI_FAILED")
+    run(["npm", "run", "typecheck"], remotion, "TYPESCRIPT_TYPECHECK_FAILED")
     forbidden = [path.name for path in (private_dir / "03_modules/M1/L01/04_render_migration/gold_s01_visual_v2").rglob("*") if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".mp4", ".wav", ".mov", ".webm"}]
     if forbidden: raise GateError("MEDIA_BINARY_IN_GIT", ",".join(forbidden))
     return {"result": "PASS", "private_sha": EXPECTED_SHA, "test_count": 36, "semantic_units": 13, "shot_ir_count": 26, "scene_ir_count": 26, "assets_materialized": 18, "no_render_manifest_sha256": EXPECTED_NO_RENDER, "visual_input_fingerprint": EXPECTED_FINGERPRINT, "typescript_typecheck": "PASS", "committed_package": "PASS", "timing_bound": False, "final_render_authorized": False, "media_rendered": False, "human_final_preview_accepted": False, "public_media_artifacts_created": False, "private_content_public_exposure": False, "no_fake_green": True}
