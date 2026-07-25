@@ -51,8 +51,8 @@ jobs:
           expected = {
               'schema_version': 'PublicRunnerFactoryCoreRequest_v1',
               'private_repo': 'TheGor-365/ai-course-production-system',
-              'private_branch': 'launch/factory-core-day4-5d',
-              'private_pr': 322,
+              'private_branch': 'launch/factory-core-day5-5d',
+              'private_pr': 327,
               'gate_id': 'FACTORY_CORE_LAUNCH_GATE',
               'status_context': 'public-runner/factory/core-launch',
               'artifact_policy': 'none',
@@ -132,13 +132,13 @@ jobs:
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
           if [[ "$RESULT" == "PASS" && "$EXIT_CODE" == "0" ]]; then
             STATE=success
-            DESCRIPTION="Public runner factory core gate passed"
+            DESCRIPTION="Public runner factory core Day 5 gate passed"
           elif [[ -n "$EXIT_CODE" ]]; then
             STATE=failure
-            DESCRIPTION="Public runner factory core gate failed"
+            DESCRIPTION="Public runner factory core Day 5 gate failed"
           else
             STATE=error
-            DESCRIPTION="Public runner factory core infrastructure error"
+            DESCRIPTION="Public runner factory core Day 5 infrastructure error"
           fi
           bash scripts/write_private_commit_status.sh \
             "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
@@ -154,7 +154,7 @@ jobs:
           [[ -n "$EXIT_CODE" ]] || EXIT_CODE=2
           COMMENT_FILE="$RUNNER_TEMP/factory_core_comment.md"
           {
-            echo '## Public runner — Factory Core Launch Gate'
+            echo '## Public runner — Factory Core Day 5 Gate'
             echo
             echo '```text'
             echo "PUBLIC_RUNNER_VALIDATED=$([[ "$RESULT" == PASS ]] && echo true || echo false)"
@@ -168,7 +168,10 @@ jobs:
             echo "STATUS_CONTEXT=$STATUS_CONTEXT"
             echo "RESULT=$RESULT"
             echo "EXIT_CODE=$EXIT_CODE"
-            echo 'DAY4_SCOPE=replay+resume+restore+ru_de_ja_fit+blind_s02_start'
+            echo 'DAY5_SCOPE=internal_launch_blocker_audit+version_pointer+quality_release_handoff'
+            echo 'REAL_STATION_OUTPUTS_USED=false'
+            echo 'PRODUCTION_READY=false'
+            echo 'RELEASE_READY=false'
             echo 'PRIVATE_ACTIONS_GREEN=false'
             echo 'PRIVATE_CONTENT_PUBLIC_EXPOSURE=false'
             echo 'ARTIFACT_POLICY=none'
