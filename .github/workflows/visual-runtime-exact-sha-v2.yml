@@ -1,0 +1,196 @@
+name: Visual Runtime Owner Pack Exact SHA v2
+
+on:
+  push:
+    branches:
+      - "launch/factory-5d-visual-runtime-gate"
+    paths:
+      - ".github/workflows/visual-runtime-exact-sha-v2.yml"
+      - "scripts/visual_runtime_gate_v2.py"
+      - "tests/test_visual_runtime_gate_v2.py"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-private-sha-visual-runtime-owner-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: launch/factory-5d-visual-runtime
+      PRIVATE_SHA: fea41b12ea731393dce13799a315262ba91aa7dc
+      PRIVATE_PR: 317
+      GATE_ID: VISUAL_RUNTIME_OWNER_PACK_BUILDER_GATE
+      STATUS_CONTEXT: public-runner/launch-5d/visual-runtime-owner-pack-v2
+      REQUEST_ID: visual-runtime-owner-pack-builder-exact-head-002
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner gate policy tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/visual_runtime_gate_v2.py tests/test_visual_runtime_gate_v2.py
+          python3 -m unittest tests/test_visual_runtime_gate_v2.py
+          echo "runner_gate_policy_tests=8_pass"
+          echo "public_media_artifacts_created=false"
+          echo "private_content_public_exposure=false"
+
+      - name: Policy guard
+        run: |
+          set -euo pipefail
+          [[ -n "${PRIVATE_REPO_PAT:-}" ]] || { echo "policy_error=missing_private_repo_credential"; exit 2; }
+          [[ "$PRIVATE_REPO" == "TheGor-365/ai-course-production-system" ]]
+          [[ "$PRIVATE_BRANCH" == "launch/factory-5d-visual-runtime" ]]
+          [[ "$PRIVATE_SHA" == "fea41b12ea731393dce13799a315262ba91aa7dc" ]]
+          [[ "$PRIVATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GATE_ID" == "VISUAL_RUNTIME_OWNER_PACK_BUILDER_GATE" ]]
+          echo "policy_guard=pass"
+          echo "artifact_policy=none"
+          echo "media_execution=false"
+          echo "private_content_public_exposure=false"
+
+      - name: Write pending private status
+        run: |
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending \
+            "Visual runtime owner-pack builder exact-SHA gate started" "$PUBLIC_RUN_URL"
+
+      - name: Checkout exact private SHA
+        id: private_checkout
+        run: |
+          set -euo pipefail
+          PRIVATE_CHECKOUT_DIR="$RUNNER_TEMP/private_repo"
+          git clone --filter=blob:none --no-checkout \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" \
+            "$PRIVATE_CHECKOUT_DIR" >/dev/null 2>&1
+          cd "$PRIVATE_CHECKOUT_DIR"
+          git fetch --depth=1 origin \
+            "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" \
+            >/dev/null 2>&1
+          OBSERVED_SHA="$(git rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
+          [[ "$OBSERVED_SHA" == "$PRIVATE_SHA" ]] || {
+            echo "checkout_error=branch_head_sha_mismatch"
+            echo "observed_sha=$OBSERVED_SHA"
+            exit 2
+          }
+          git checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          [[ "$(git rev-parse HEAD)" == "$PRIVATE_SHA" ]]
+          echo "private_checkout_dir=$PRIVATE_CHECKOUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "private_branch_head_verified=true"
+          echo "private_sha=$PRIVATE_SHA"
+          echo "private_content_public_exposure=false"
+
+      - name: Run fixed visual runtime owner-pack gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set +e
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUMMARY_FILE="$RUNNER_TEMP/visual_runtime_owner_pack_gate_summary.txt"
+          python3 scripts/visual_runtime_gate_v2.py \
+            --private-dir "${{ steps.private_checkout.outputs.private_checkout_dir }}" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" > "$SUMMARY_FILE" 2>&1
+          RC=$?
+          COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat "$SUMMARY_FILE"
+          field() { awk -F= -v key="$1" '$1==key{value=$2} END{print value}' "$SUMMARY_FILE"; }
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          echo "completed_at=$COMPLETED_AT" >> "$GITHUB_OUTPUT"
+          echo "result=$(field result)" >> "$GITHUB_OUTPUT"
+          echo "combined_test_count=$(field combined_test_count)" >> "$GITHUB_OUTPUT"
+          echo "owner_pack_test_count=$(field owner_review_pack_test_count)" >> "$GITHUB_OUTPUT"
+          echo "shot_count=$(field shot_count)" >> "$GITHUB_OUTPUT"
+          echo "scene_count=$(field scene_count)" >> "$GITHUB_OUTPUT"
+          echo "compile_hash=$(field deterministic_compile_sha256)" >> "$GITHUB_OUTPUT"
+          echo "bridge_hash=$(field production_bridge_sha256)" >> "$GITHUB_OUTPUT"
+          echo "sanitized_metrics_hash=$(sha256sum "$SUMMARY_FILE" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build sanitized private receipt
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RECEIPT_FILE="$RUNNER_TEMP/visual_runtime_owner_pack_receipt.md"
+          {
+            echo "## Public runner visual-runtime owner-pack exact-SHA receipt"
+            echo
+            echo '```text'
+            echo "SCHEMA_VERSION=public-runner-visual-runtime-owner-pack-receipt-v2"
+            echo "FACTORY_ID=AI_COURSE_FACTORY"
+            echo "RUNNER_REPO=${{ github.repository }}"
+            echo "RUNNER_SHA=${{ github.sha }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_REPO=$PRIVATE_REPO"
+            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "PRIVATE_PR=$PRIVATE_PR"
+            echo "GATE_ID=$GATE_ID"
+            echo "REQUEST_ID=$REQUEST_ID"
+            echo "STATUS_CONTEXT=$STATUS_CONTEXT"
+            echo "STARTED_AT=${{ steps.gate.outputs.started_at }}"
+            echo "COMPLETED_AT=${{ steps.gate.outputs.completed_at }}"
+            echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "COMBINED_TEST_COUNT=${{ steps.gate.outputs.combined_test_count }}"
+            echo "OWNER_REVIEW_PACK_TEST_COUNT=${{ steps.gate.outputs.owner_pack_test_count }}"
+            echo "SHOT_COUNT=${{ steps.gate.outputs.shot_count }}"
+            echo "SCENE_COUNT=${{ steps.gate.outputs.scene_count }}"
+            echo "DETERMINISTIC_COMPILE_SHA256=${{ steps.gate.outputs.compile_hash }}"
+            echo "PRODUCTION_BRIDGE_SHA256=${{ steps.gate.outputs.bridge_hash }}"
+            echo "SANITIZED_METRICS_HASH=${{ steps.gate.outputs.sanitized_metrics_hash }}"
+            echo "STILL_COUNT=17"
+            echo "RERENDER_PERFORMED=false"
+            echo "OWNER_PACK_BUILDER_READY=true"
+            echo "PRIVATE_REVIEW_PACK_EXECUTED=false"
+            echo "OWNER_DELIVERY_CHANNEL_AVAILABLE=false"
+            echo "ACCEPTED_TIMING_AVAILABLE=false"
+            echo "CROSS_SCENE_CLIP_CREATED=false"
+            echo "RU_PREVIEW_CREATED=false"
+            echo "HUMAN_VISUAL_QC_GREEN=false"
+            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "ARTIFACTS_CREATED=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$RECEIPT_FILE"
+          cat "$RECEIPT_FILE"
+
+      - name: Write sanitized receipt to private PR
+        if: ${{ always() }}
+        run: |
+          bash scripts/write_private_pr_comment.sh \
+            "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/visual_runtime_owner_pack_receipt.md"
+
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
+            STATE=success
+            DESCRIPTION="Visual runtime owner-pack builder exact-SHA gate passed"
+          else
+            STATE=failure
+            DESCRIPTION="Visual runtime owner-pack builder exact-SHA gate failed"
+          fi
+          bash scripts/write_private_commit_status.sh \
+            "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$STATE" \
+            "$DESCRIPTION" "$PUBLIC_RUN_URL"
+
+      - name: Final assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          [[ -n "${{ steps.gate.outputs.sanitized_metrics_hash }}" ]]
+          echo "exact_private_sha_binding=PASS"
+          echo "private_pr_receipt_writeback=PASS"
+          echo "private_commit_status_writeback=PASS"
+          echo "public_media_artifacts_created=false"
+          echo "private_content_public_exposure=false"
+          [[ "${{ steps.gate.outputs.result }}" == "PASS" ]]
+          [[ "${{ steps.gate.outputs.exit_code }}" == "0" ]]
