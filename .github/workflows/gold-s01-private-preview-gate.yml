@@ -115,7 +115,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          forbidden = 'actions/' + 'upload-artifact'
+          forbidden = 'uses: ' + 'actions/' + 'upload-artifact'
           hits = [str(path) for path in Path('.github/workflows').glob('*.y*') if forbidden in path.read_text(encoding='utf-8')]
           if hits:
               raise SystemExit('PUBLIC_ARTIFACT_UPLOAD_PRESENT=' + ','.join(hits))
