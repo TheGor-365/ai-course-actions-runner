@@ -1,0 +1,13 @@
+{
+  "schema_version": "PublicRunnerContentSemanticsSnapshotRequest_v4",
+  "private_repo": "TheGor-365/ai-course-source-library",
+  "private_branch": "launch/factory-5d-content-semantics-snapshot-v4",
+  "private_sha": "12eb8002b66156d6cd2d67d52cdadd3f8fb505a8",
+  "rolling_pr": 55,
+  "gate_id": "CONTENT_SEMANTICS_SNAPSHOT_V4_GATE",
+  "status_context": "public-runner/content-semantics/snapshot-v4",
+  "artifact_policy": "none",
+  "private_content_public_exposure": false,
+  "production_green_claimed": false,
+  "no_fake_green": true
+}

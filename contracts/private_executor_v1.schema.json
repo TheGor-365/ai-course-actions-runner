@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PRIVATE_EXECUTOR_v1",
+  "title": "Private executor request and receipt envelope",
+  "type": "object",
+  "required": ["request", "receipt"],
+  "additionalProperties": false,
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "request_id", "package_request_id", "station_id", "attempt_id", "executor_class", "input_manifest_pointer", "input_hash", "command_profile_id", "runtime_lock_id", "resource_limits", "timeout_seconds", "output_artifact_types", "idempotency_key", "cleanup_policy"],
+      "properties": {
+        "schema_version": {"const": "PRIVATE_EXECUTOR_REQUEST_v1"},
+        "request_id": {"type": "string", "minLength": 1},
+        "package_request_id": {"type": "string", "minLength": 1},
+        "station_id": {"type": "string", "minLength": 1},
+        "attempt_id": {"type": "string", "minLength": 1},
+        "executor_class": {"enum": ["locked_private_linux", "self_hosted_private_runner", "fixture"]},
+        "input_manifest_pointer": {"type": "string", "minLength": 1},
+        "input_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "command_profile_id": {"type": "string", "pattern": "^[A-Z0-9_]+$"},
+        "runtime_lock_id": {"type": "string", "minLength": 1},
+        "resource_limits": {"type": "object", "minProperties": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "output_artifact_types": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "idempotency_key": {"type": "string", "minLength": 16},
+        "resume_token_optional": {"type": ["string", "null"]},
+        "cleanup_policy": {"enum": ["always", "on_success", "retain_on_failure"]}
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "request_id", "station_id", "attempt_id", "executor_id", "runtime_lock_id", "started_at", "completed_at", "exit_code", "result", "failure_class", "retryable", "output_artifacts", "sanitized_metrics", "cleanup_status", "private_content_public_exposure"],
+      "properties": {
+        "schema_version": {"const": "PRIVATE_EXECUTOR_RECEIPT_v1"},
+        "request_id": {"type": "string"},
+        "station_id": {"type": "string"},
+        "attempt_id": {"type": "string"},
+        "executor_id": {"type": "string"},
+        "runtime_lock_id": {"type": "string"},
+        "started_at": {"type": "string"},
+        "completed_at": {"type": "string"},
+        "exit_code": {"type": "integer"},
+        "result": {"enum": ["PASS", "FAIL"]},
+        "failure_class": {"type": ["string", "null"]},
+        "retryable": {"type": "boolean"},
+        "output_artifacts": {"type": "array"},
+        "sanitized_metrics": {"type": "object"},
+        "resume_token_optional": {"type": ["string", "null"]},
+        "cleanup_status": {"enum": ["PASS", "FAIL", "NOT_REQUIRED"]},
+        "private_content_public_exposure": {"const": false}
+      }
+    }
+  }
+}
