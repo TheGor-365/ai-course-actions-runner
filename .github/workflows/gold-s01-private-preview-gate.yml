@@ -56,8 +56,20 @@ jobs:
             --profile config/gold_s01_private_preview_profile_v1.json \
             --request fixtures/gold_s01_private_preview/provisional_request.json \
             --allow-provisional
-      - name: Run mutation, store, restore, resume and owner tests
-        run: python3 -m unittest discover -s tests -p 'test_gold_s01_private_preview.py' -v
+      - name: Test request contracts and mutation gates
+        run: python3 tests/test_gold_s01_private_preview.py T.test_contracts_and_mutations -v
+      - name: Test public refusal and exact heads
+        run: python3 tests/test_gold_s01_private_preview.py T.test_public_execution_and_exact_head -v
+      - name: Test exact materialization hashes
+        run: python3 tests/test_gold_s01_private_preview.py T.test_materialization_exact_hashes -v
+      - name: Test primary replica restore and codec
+        run: python3 tests/test_gold_s01_private_preview.py T.test_store_replica_restore_overwrite_and_codec -v
+      - name: Test corrupted copy rejection
+        run: python3 tests/test_gold_s01_private_preview.py T.test_corrupted_copy -v
+      - name: Test station failure resume idempotency
+        run: python3 tests/test_gold_s01_private_preview.py T.test_idempotent_failure_resume -v
+      - name: Test host probe and owner decisions
+        run: python3 tests/test_gold_s01_private_preview.py T.test_host_probe_owner_and_public_diagnostic -v
       - name: Public runner diagnostic only
         run: |
           set -euo pipefail
