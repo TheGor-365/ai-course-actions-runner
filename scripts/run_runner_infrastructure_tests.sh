@@ -10,13 +10,15 @@ python3 -m py_compile \
   scripts/alignment_model_provisioning_v1.py \
   scripts/validate_cross_repo_sync_v1.py \
   scripts/private_owner_delivery_v1.py \
+  scripts/visual_owner_pack_adapter_v1.py \
   scripts/run_private_owner_delivery_exact_v1.py \
   tests/test_runner_infrastructure.py \
   tests/test_content_semantics_gate.py \
   tests/test_alignment_model_provisioning.py \
   tests/test_cross_repo_sync.py \
   tests/test_private_owner_delivery.py \
-  tests/test_private_owner_delivery_receipt_chain.py
+  tests/test_private_owner_delivery_receipt_chain.py \
+  tests/test_visual_owner_pack_adapter.py
 python3 scripts/runner_infrastructure_v1.py validate-contract
 python3 scripts/runner_infrastructure_v1.py validate-private-contract
 python3 scripts/validate_cross_repo_sync_v1.py \
@@ -31,6 +33,8 @@ assert profiles["public_workflow_execution_allowed"] is False
 assert profiles["public_artifact_upload_allowed"] is False
 assert profiles["executor_entrypoint"] == "scripts/run_private_owner_delivery_exact_v1.py"
 assert profiles["direct_internal_module_cli_authoritative"] is False
+assert profiles["profiles"]["OWNER_DELIVERY_EXISTING_STILLS_V1"]["fixed_assembler"] == "production_visual_runtime_owner_review_pack_v1"
+assert profiles["profiles"]["OWNER_DELIVERY_EXISTING_STILLS_V1"]["validated_by_runner_pr"] == 9
 assert set(profiles["profiles"]) == {"OWNER_DELIVERY_EXISTING_STILLS_V1", "OWNER_DELIVERY_EXISTING_MEDIA_V1"}
 assert set(schemas["schemas"]) == {
     "private_owner_delivery_request_v1",
