@@ -1,0 +1,12 @@
+{
+  "schema_version": "PublicRunnerFactoryCoreRequest_v1",
+  "private_repo": "TheGor-365/ai-course-production-system",
+  "private_branch": "launch/factory-core-day4-5d",
+  "private_sha": "9ba88f49c26d6a3205ce9580bf020adbad6eab74",
+  "private_pr": 322,
+  "gate_id": "FACTORY_CORE_DAY4_EXACT_GATE",
+  "status_context": "public-runner/factory/core-day4-exact",
+  "artifact_policy": "none",
+  "private_content_public_exposure": false,
+  "no_fake_green": true
+}
