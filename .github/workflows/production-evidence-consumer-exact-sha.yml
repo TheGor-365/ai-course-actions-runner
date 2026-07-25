@@ -26,11 +26,11 @@ jobs:
     env:
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: launch/factory-5d-runner-infrastructure-day2
-      PRIVATE_SHA: bce6aabfe3569089f47a175a0f3b36f7dd383bc5
+      PRIVATE_SHA: 0e614563395497b7b78e0c6fb244b71eed668520
       PRIVATE_PR: 324
       GATE_ID: PRODUCTION_RUNNER_EVIDENCE_CONSUMER_GATE
       STATUS_CONTEXT: public-runner/launch-5d/production-evidence-consumer-day2
-      REQUEST_ID: runner-infrastructure-day2-production-consumer-001
+      REQUEST_ID: runner-infrastructure-day2-production-consumer-002
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
