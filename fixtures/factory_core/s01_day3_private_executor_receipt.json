@@ -1,0 +1,50 @@
+{
+  "artifacts": [
+    {
+      "artifact_id": "art_day3_visual_master",
+      "artifact_type": "visual_master",
+      "created_at": "2026-07-24T08:00:00Z",
+      "private_pointer_or_repository_path": "artifact://fixture-private-store/M1-L01/S01/visual_master.json",
+      "producer_version": "fixture-private-executor-v1",
+      "request_id": "req_5f27a82b941f6b5c",
+      "restore_status": "NOT_APPLICABLE",
+      "schema_version": "ArtifactRegistryRecord_v2_minimal",
+      "sha256": "8fc74a8defeb32f20c857018996eed059f178cfa9e7886ee78aba61d1a800aa1",
+      "size_bytes": 39,
+      "station_id": "private_render",
+      "storage_class": "fixture_metadata"
+    },
+    {
+      "artifact_id": "art_day3_ru_preview",
+      "artifact_type": "RU_preview",
+      "created_at": "2026-07-24T08:00:00Z",
+      "private_pointer_or_repository_path": "artifact://fixture-private-store/M1-L01/S01/ru_preview.json",
+      "producer_version": "fixture-private-executor-v1",
+      "request_id": "req_5f27a82b941f6b5c",
+      "restore_status": "NOT_APPLICABLE",
+      "schema_version": "ArtifactRegistryRecord_v2_minimal",
+      "sha256": "00f72b3f3b0736ae06d040c07ad4092d612744d6d3a4693c1b096f37ee435973",
+      "size_bytes": 36,
+      "station_id": "private_render",
+      "storage_class": "fixture_metadata"
+    }
+  ],
+  "completed_at": "2026-07-24T08:00:01Z",
+  "evidence_class": "COMPATIBLE_FIXTURE",
+  "executor_id": "fixture-private-executor",
+  "executor_version": "fixture-v1",
+  "failure_class": null,
+  "idempotency_key": "e155bc18f12c478db062e5db26b023c5d4df85ad8490497f91975581128ab4e9",
+  "interface_version": "launch-core-v1",
+  "media_executed": false,
+  "partial_output_count": 0,
+  "quarantine_manifest": null,
+  "real_output_claim": false,
+  "receipt_hash": "6a17be10b5ff5f2835c034aeef0ee42cb922d9ce1b0e5a2ab87539560760b5be",
+  "render_request_id": "render_e155bc18f12c478db062",
+  "request_id": "req_5f27a82b941f6b5c",
+  "retryable": false,
+  "schema_version": "PrivateExecutorReceipt_v1",
+  "started_at": "2026-07-24T08:00:00Z",
+  "status": "SUCCEEDED"
+}
