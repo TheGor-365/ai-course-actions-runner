@@ -1,0 +1,17 @@
+{
+  "schema_version": "alignment-model-profile-v1",
+  "profile_id": "ALIGNMENT_MODEL_RU_WAV2VEC2_V1",
+  "model_repo": "jonatasgrosman/wav2vec2-large-xlsr-53-russian",
+  "model_revision": "2329100508896c6d9b157019803ab5601e6f3406",
+  "runtime_lock_id": "ru-alignment-wav2vec2-23291005-v1",
+  "execution_class": "locked_private_Linux_host_or_self_hosted_private_runner",
+  "max_workers": 1,
+  "download_timeout_seconds": 600,
+  "etag_timeout_seconds": 60,
+  "resume_required": true,
+  "offline_load_verification_required": true,
+  "arbitrary_model_repo_allowed": false,
+  "arbitrary_revision_allowed": false,
+  "public_artifacts_allowed": false,
+  "media": false
+}
