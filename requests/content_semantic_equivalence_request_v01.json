@@ -1,0 +1,17 @@
+{
+  "schema_version": "PublicRunnerContentSemanticEquivalenceRequest_v1",
+  "private_repo": "TheGor-365/ai-course-source-library",
+  "private_branch": "launch/factory-5d-content-semantics-snapshot-v7",
+  "private_sha": "0bbe50ba192c6b627f055b9ce0fa7dd4d9b5f902",
+  "rolling_pr": 55,
+  "gate_id": "CONTENT_SEMANTIC_EQUIVALENCE_GATE",
+  "status_context": "public-runner/content-semantics/semantic-equivalence-v1",
+  "expected_content_hash": "354f4d9c6c94a474131728723aae535ce7006b7d932e127c094c7842b72ee834",
+  "expected_slot_count": 13,
+  "target_locales": ["ru", "de", "ja"],
+  "artifact_policy": "none",
+  "private_content_public_exposure": false,
+  "final_locale_fit_claimed": false,
+  "production_green_claimed": false,
+  "no_fake_green": true
+}
