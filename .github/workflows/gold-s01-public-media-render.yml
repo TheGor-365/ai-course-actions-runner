@@ -184,14 +184,23 @@ jobs:
           python3 scripts/gold_s01_public_media_v1.py validate-profile --profile "$PROFILE_PATH"
           python3 tests/test_gold_s01_public_media.py -v
 
-      - name: Prove public runner toolchain baseline
+      - name: Install and prove public media toolchain baseline
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            fontconfig \
+            fonts-dejavu-core \
+            fonts-liberation
+          for command in node npm ffmpeg ffprobe fc-list; do
+            command -v "$command" >/dev/null
+          done
           node --version
           npm --version
-          ffmpeg -version | sed -n '1p'
-          ffprobe -version | sed -n '1p'
-          fc-list | sed -n '1,5p' >/dev/null
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
+          test -n "$(fc-list | sed -n '1p')"
 
       - name: Clone exact private production SHA without content logging
         run: |
@@ -299,8 +308,8 @@ jobs:
           node --version
           npm --version
           npx remotion --version
-          ffmpeg -version | sed -n '1p'
-          ffprobe -version | sed -n '1p'
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
 
       - name: Render exact 60-second pilot and machine QC
         if: steps.preflight.outputs.preflight_status == 'PASS' && (env.PRIMARY_PUSH_CHAIN == 'true' || env.RENDER_MODE == 'pilot_60s')
