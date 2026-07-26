@@ -1,0 +1,74 @@
+name: Canonical Gold PSU Inventory v1
+
+on:
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-psu-inventory-v1.yml"
+      - "scripts/canonical_gold_psu_inventory_v1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: canonical-gold-psu-inventory-v1
+  cancel-in-progress: false
+
+jobs:
+  exact-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-gold-v2-hybrid-psu-v1
+      SOURCE_SHA: 2407e2a3a10f4064b2d2abe450dd69d829482d6e
+      SOURCE_DIR: ${{ github.workspace }}/source
+      OUT: ${{ github.workspace }}/inventory-output
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Clone exact source authority
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          git init -q "$SOURCE_DIR"
+          git -C "$SOURCE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/${SOURCE_BRANCH}" | awk '{print $1}')" = "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" fetch -q --depth=1 origin "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" checkout -q --detach "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Build sanitized package inventory
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          python3 scripts/canonical_gold_psu_inventory_v1.py \
+            --repo "$SOURCE_DIR" \
+            --source-repo "$SOURCE_REPO" \
+            --source-sha "$SOURCE_SHA" \
+            --output "$OUT/source_inventory.json"
+          sha256sum "$OUT/source_inventory.json" > "$OUT/SHA256SUMS.txt"
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: canonical-gold-psu-inventory-${{ env.SOURCE_SHA }}
+          path: ${{ env.OUT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Emit receipt
+        run: |
+          set -euo pipefail
+          echo "SOURCE_SHA=$SOURCE_SHA"
+          echo "INVENTORY_ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}"
+          echo "PRIVATE_CONTENT_INCLUDED=false"
+          echo "NO_FAKE_GREEN=true"
