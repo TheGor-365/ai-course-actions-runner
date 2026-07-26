@@ -20,62 +20,22 @@
     "package_lock_git_blob_sha": "79bd6f16620466a506eed42b4502324c483ef98d",
     "package_lock_sha256": "655e2801a3ccf78f246afad53f055b347ffc01d2c154b8c95b1ba07ac6aebcea",
     "package_lock_size_bytes": 107959,
-    "resolved_versions": {
-      "remotion": "4.0.489",
-      "@remotion/cli": "4.0.489",
-      "react": "18.3.1",
-      "react-dom": "18.3.1",
-      "typescript": "5.9.3"
-    },
-    "node_version": null,
-    "npm_version": null,
-    "chromium_version": null,
-    "chromium_sha256": null,
+    "resolved_versions": {"remotion": "4.0.489", "@remotion/cli": "4.0.489", "react": "18.3.1", "react-dom": "18.3.1", "typescript": "5.9.3"},
     "ffmpeg_version": "6.1.1-3ubuntu5",
     "ffprobe_version": "6.1.1-3ubuntu5",
-    "font_manifest_sha256": null
+    "binding_mode": "exact-sanitized-host-receipt-v1"
+  },
+  "host_lock_policy": {
+    "required_commands": ["python3", "node", "npm", "ffmpeg", "ffprobe"],
+    "browser_candidates": ["chromium", "chromium-browser", "google-chrome"],
+    "required_font_aliases": ["sans-serif", "monospace"],
+    "store_probe_bytes": 4096,
+    "dependency_install_authorized": false,
+    "raw_paths_in_receipt_allowed": false
   },
   "expected_outputs": {
-    "clean_visual_master": {
-      "filename": "M1_L01_S01_RU_visual_master_clean_v1.mp4",
-      "container": "mov,mp4,m4a,3gp,3g2,mj2",
-      "video_codec": "h264",
-      "pixel_format": "yuv420p",
-      "width": 1920,
-      "height": 1080,
-      "fps_num": 30,
-      "fps_den": 1,
-      "audio_streams": 0
-    },
-    "ru_preview": {
-      "filename": "M1_L01_S01_RU_preview_v1.mp4",
-      "container": "mov,mp4,m4a,3gp,3g2,mj2",
-      "video_codec": "h264",
-      "pixel_format": "yuv420p",
-      "width": 1920,
-      "height": 1080,
-      "fps_num": 30,
-      "fps_den": 1,
-      "audio_codec": "aac",
-      "audio_channels": 2,
-      "audio_sample_rate": 48000
-    }
+    "clean_visual_master": {"filename": "M1_L01_S01_RU_visual_master_clean_v1.mp4", "container": "mov,mp4,m4a,3gp,3g2,mj2", "video_codec": "h264", "pixel_format": "yuv420p", "width": 1920, "height": 1080, "fps_num": 30, "fps_den": 1, "audio_streams": 0},
+    "ru_preview": {"filename": "M1_L01_S01_RU_preview_v1.mp4", "container": "mov,mp4,m4a,3gp,3g2,mj2", "video_codec": "h264", "pixel_format": "yuv420p", "width": 1920, "height": 1080, "fps_num": 30, "fps_den": 1, "audio_codec": "aac", "audio_channels": 2, "audio_sample_rate": 48000}
   },
-  "stations": [
-    "01_PREFLIGHT",
-    "02_INPUT_MATERIALIZATION",
-    "03_NO_RENDER_VALIDATE",
-    "04_REPRESENTATIVE_STILLS",
-    "05_STILL_MACHINE_QC",
-    "06_SHORT_CROSS_SCENE_CLIP",
-    "07_FULL_CLEAN_VISUAL_MASTER",
-    "08_AUDIO_CAPTION_MUX",
-    "09_FFPROBE_AND_SYNC_QC",
-    "10_PRIMARY_REGISTRATION",
-    "11_REPLICA_COPY",
-    "12_RESTORE_TO_CLEAN_LOCATION",
-    "13_RESTORE_HASH_VERIFY",
-    "14_OWNER_REVIEW_PACKAGE",
-    "15_SANITIZED_WRITEBACK"
-  ]
+  "stations": ["01_PREFLIGHT", "02_INPUT_MATERIALIZATION", "03_NO_RENDER_VALIDATE", "04_REPRESENTATIVE_STILLS", "05_STILL_MACHINE_QC", "06_SHORT_CROSS_SCENE_CLIP", "07_FULL_CLEAN_VISUAL_MASTER", "08_AUDIO_CAPTION_MUX", "09_FFPROBE_AND_SYNC_QC", "10_PRIMARY_REGISTRATION", "11_REPLICA_COPY", "12_RESTORE_TO_CLEAN_LOCATION", "13_RESTORE_HASH_VERIFY", "14_OWNER_REVIEW_PACKAGE", "15_SANITIZED_WRITEBACK"]
 }
