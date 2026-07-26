@@ -31,8 +31,8 @@ jobs:
     timeout-minutes: 30
     env:
       SOURCE_REPO: TheGor-365/ai-course-source-library
-      SOURCE_BRANCH: worker/m1-l01-gold-v2-hybrid-psu-v1
-      SOURCE_SHA: 2407e2a3a10f4064b2d2abe450dd69d829482d6e
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf
       SOURCE_DIR: ${{ github.workspace }}/source
       OUT: ${{ github.workspace }}/inventory-output
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
@@ -55,11 +55,13 @@ jobs:
           git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
           test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
 
-      - name: Build sanitized package inventory
+      - name: Validate canonical source and build sanitized inventory
         id: inventory
         run: |
           set -euo pipefail
           mkdir -p "$OUT"
+          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
+            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" | tee "$OUT/source-validator.jsonl"
           python3 scripts/canonical_gold_psu_inventory_v1.py \
             --repo "$SOURCE_DIR" \
             --source-repo "$SOURCE_REPO" \
@@ -94,6 +96,8 @@ jobs:
           PACKAGE_FILE_COUNT=${{ steps.inventory.outputs.package_file_count }}
           EXTERNAL_DEPENDENCY_FILE_COUNT=${{ steps.inventory.outputs.external_file_count }}
           PRIVATE_CONTENT_INCLUDED=false
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
           NO_FAKE_GREEN=true
           \`\`\`
           EOF
@@ -106,4 +110,6 @@ jobs:
           echo "SOURCE_SHA=$SOURCE_SHA"
           echo "INVENTORY_ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}"
           echo "PRIVATE_CONTENT_INCLUDED=false"
+          echo "FULL_15_MINUTE_RENDERED=false"
+          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
           echo "NO_FAKE_GREEN=true"
