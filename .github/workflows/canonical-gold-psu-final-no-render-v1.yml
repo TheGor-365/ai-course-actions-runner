@@ -1,0 +1,136 @@
+name: Canonical Gold PSU Final No Render v1
+
+on:
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-psu-final-no-render-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  exact-final-no-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: 28121d06b8ade42b6728a548f73b89633e1ed6d9
+      PRODUCTION_REPO: TheGor-365/ai-course-production-system
+      PRODUCTION_BRANCH: repair/m1-l01-s01-canonical-psu-compiler-v1
+      PRODUCTION_SHA: c2dfabe87fd2807f436747d7f8ccd27f0c6e6ae1
+      SOURCE_DIR: ${{ github.workspace }}/source
+      PRODUCTION_DIR: ${{ github.workspace }}/production
+      OUTPUT_DIR: ${{ github.workspace }}/compiled
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Clone exact private heads
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          for spec in \
+            "$SOURCE_DIR|$SOURCE_REPO|$SOURCE_BRANCH|$SOURCE_SHA" \
+            "$PRODUCTION_DIR|$PRODUCTION_REPO|$PRODUCTION_BRANCH|$PRODUCTION_SHA"; do
+            IFS='|' read -r target repo branch sha <<< "$spec"
+            git init -q "$target"
+            git -C "$target" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            test "$(git -C "$target" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')" = "$sha"
+            git -C "$target" fetch -q --depth=1 origin "$sha"
+            git -C "$target" checkout -q --detach "$sha"
+            git -C "$target" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$target" rev-parse HEAD)" = "$sha"
+            test -z "$(git -C "$target" status --porcelain)"
+          done
+
+      - name: Validate and compile exact canonical package
+        id: compile
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
+            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" | tee "$OUTPUT_DIR/source-validation.jsonl"
+          python3 "$PRODUCTION_DIR/04_validators/render/validate_canonical_gold_psu_v1.py" | tee "$OUTPUT_DIR/production-validation.jsonl"
+          python3 "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" \
+            --source-dir "$SOURCE_DIR" --source-repo "$SOURCE_REPO" \
+            --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA" \
+            --output-dir "$OUTPUT_DIR" | tee "$OUTPUT_DIR/production-compile.jsonl"
+          closure=$(python3 -c 'import json;print(json.load(open("'"$OUTPUT_DIR/psu_closure_receipt.json"'"))["psu_closure_sha256"])')
+          external=$(python3 -c 'import json;print(json.load(open("'"$OUTPUT_DIR/psu_closure_receipt.json"'"))["external_dependency_hash_set_sha256"])')
+          fields=$(python3 -c 'import json;print(json.load(open("'"$OUTPUT_DIR/field_consumption_ledger.json"'"))["required_source_field_count"])')
+          compiler=$(sha256sum "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" | awk '{print $1}')
+          event_graph=$(sha256sum "$OUTPUT_DIR/executable_event_graph.json" | awk '{print $1}')
+          minute_plan=$(sha256sum "$OUTPUT_DIR/minute_window_index.json" | awk '{print $1}')
+          shot_ir=$(sha256sum "$OUTPUT_DIR/resolved_shot_ir.json" | awk '{print $1}')
+          scene_ir=$(sha256sum "$OUTPUT_DIR/resolved_scene_ir.json" | awk '{print $1}')
+          runtime=$(sha256sum "$OUTPUT_DIR/runtime_binding_manifest.json" | awk '{print $1}')
+          cat > "$OUTPUT_DIR/execution-identities.json" <<EOF
+          {"compiler_sha256":"$compiler","event_graph_sha256":"$event_graph","external_dependency_hash_set_sha256":"$external","minute_plan_sha256":"$minute_plan","production_sha":"$PRODUCTION_SHA","psu_closure_sha256":"$closure","runtime_binding_sha256":"$runtime","scene_ir_sha256":"$scene_ir","shot_ir_sha256":"$shot_ir","source_field_count":$fields,"source_sha":"$SOURCE_SHA"}
+          EOF
+          echo "closure_sha256=$closure" >> "$GITHUB_OUTPUT"
+          echo "compiler_sha256=$compiler" >> "$GITHUB_OUTPUT"
+          echo "event_graph_sha256=$event_graph" >> "$GITHUB_OUTPUT"
+          echo "minute_plan_sha256=$minute_plan" >> "$GITHUB_OUTPUT"
+          echo "shot_ir_sha256=$shot_ir" >> "$GITHUB_OUTPUT"
+          echo "scene_ir_sha256=$scene_ir" >> "$GITHUB_OUTPUT"
+          echo "runtime_binding_sha256=$runtime" >> "$GITHUB_OUTPUT"
+          echo "source_field_count=$fields" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Typecheck exact runtime
+        working-directory: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: canonical-gold-psu-final-no-render-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish final no-render receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(cat <<EOF
+          ## Canonical Gold PSU final no-render receipt
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          PRODUCTION_SHA=${PRODUCTION_SHA}
+          PSU_CLOSURE_SHA256=${{ steps.compile.outputs.closure_sha256 }}
+          SOURCE_FIELD_COUNT=${{ steps.compile.outputs.source_field_count }}
+          COMPILER_SHA256=${{ steps.compile.outputs.compiler_sha256 }}
+          EVENT_GRAPH_SHA256=${{ steps.compile.outputs.event_graph_sha256 }}
+          MINUTE_PLAN_SHA256=${{ steps.compile.outputs.minute_plan_sha256 }}
+          SHOT_IR_SHA256=${{ steps.compile.outputs.shot_ir_sha256 }}
+          SCENE_IR_SHA256=${{ steps.compile.outputs.scene_ir_sha256 }}
+          RUNTIME_BINDING_SHA256=${{ steps.compile.outputs.runtime_binding_sha256 }}
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null

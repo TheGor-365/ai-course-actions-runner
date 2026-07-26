@@ -1,0 +1,86 @@
+name: Canonical Gold PSU Tree Snapshot v1
+
+on:
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-psu-tree-snapshot-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: 87ad805b6a7f2966058e716faa8c9fcc75ff16f8
+      SOURCE_DIR: ${{ github.workspace }}/source
+      OUT: ${{ github.workspace }}/snapshot
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      SNAPSHOT_MODE: SANITIZED_PATH_BLOB_SHA256_ONLY
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Clone exact source
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          git init -q "$SOURCE_DIR"
+          git -C "$SOURCE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/${SOURCE_BRANCH}" | awk '{print $1}')" = "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" fetch -q --depth=1 origin "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" checkout -q --detach "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Build sanitized exact tree snapshot
+        id: snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          python3 scripts/canonical_gold_psu_inventory_v1.py \
+            --repo "$SOURCE_DIR" --source-repo "$SOURCE_REPO" --source-sha "$SOURCE_SHA" \
+            --output "$OUT/source_inventory.json" | tee "$OUT/inventory.log"
+          sha256sum "$OUT/source_inventory.json" > "$OUT/SHA256SUMS.txt"
+          echo "inventory_sha256=$(sha256sum "$OUT/source_inventory.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "package_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["package_file_count"])')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: canonical-gold-psu-tree-${{ env.SOURCE_SHA }}
+          path: ${{ env.OUT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish tree receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(cat <<EOF
+          ## Canonical Gold PSU exact tree snapshot
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          SNAPSHOT_MODE=${SNAPSHOT_MODE}
+          PACKAGE_FILE_COUNT=${{ steps.snapshot.outputs.package_file_count }}
+          INVENTORY_SHA256=${{ steps.snapshot.outputs.inventory_sha256 }}
+          PRIVATE_CONTENT_INCLUDED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null

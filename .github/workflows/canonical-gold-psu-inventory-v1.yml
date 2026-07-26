@@ -1,0 +1,199 @@
+name: Canonical Gold PSU Inventory and Compile v1
+
+on:
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/canonical-gold-psu-inventory-v1.yml"
+      - "scripts/canonical_gold_psu_inventory_v1.py"
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-psu-inventory-v1.yml"
+      - "scripts/canonical_gold_psu_inventory_v1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: canonical-gold-psu-inventory-v1-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  exact-inventory-and-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: 731280471dc0b59b99b9c3192828ba1a9e567c02
+      SOURCE_DIR: ${{ github.workspace }}/source
+      PRODUCTION_REPO: TheGor-365/ai-course-production-system
+      PRODUCTION_BRANCH: repair/m1-l01-s01-canonical-psu-compiler-v1
+      PRODUCTION_SHA: 8739bd3596766ead857bbd60bc2305673a484148
+      PRODUCTION_DIR: ${{ github.workspace }}/production
+      OUT: ${{ github.workspace }}/inventory-output
+      COMPILED: ${{ github.workspace }}/compiled-output
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      RECEIPT_PR: "19"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Clone exact source and production authorities
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          for spec in \
+            "$SOURCE_DIR|$SOURCE_REPO|$SOURCE_BRANCH|$SOURCE_SHA" \
+            "$PRODUCTION_DIR|$PRODUCTION_REPO|$PRODUCTION_BRANCH|$PRODUCTION_SHA"; do
+            IFS='|' read -r target repo branch sha <<< "$spec"
+            git init -q "$target"
+            git -C "$target" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            test "$(git -C "$target" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')" = "$sha"
+            git -C "$target" fetch -q --depth=1 origin "$sha"
+            git -C "$target" checkout -q --detach "$sha"
+            git -C "$target" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$target" rev-parse HEAD)" = "$sha"
+            test -z "$(git -C "$target" status --porcelain)"
+          done
+
+      - name: Validate canonical source
+        id: source_gate
+        continue-on-error: true
+        run: |
+          set +e
+          set -o pipefail
+          mkdir -p "$OUT" "$COMPILED"
+          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
+            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" 2>&1 | tee "$OUT/source-validator.log"
+          rc=${PIPESTATUS[0]}
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "terminal_line=$(tail -n 1 "$OUT/source-validator.log" | tr '\n\r' '  ' | cut -c1-500)" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Build sanitized exact inventory
+        if: always()
+        id: inventory
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_psu_inventory_v1.py \
+            --repo "$SOURCE_DIR" --source-repo "$SOURCE_REPO" --source-sha "$SOURCE_SHA" \
+            --output "$OUT/source_inventory.json" 2>&1 | tee "$OUT/inventory.log"
+          sha256sum "$OUT/source_inventory.json" > "$OUT/SHA256SUMS.txt"
+          echo "inventory_sha256=$(sha256sum "$OUT/source_inventory.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "package_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["package_file_count"])')" >> "$GITHUB_OUTPUT"
+          echo "external_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["external_dependency_file_count"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Compile exact production package
+        if: steps.source_gate.outcome == 'success'
+        id: compile
+        continue-on-error: true
+        run: |
+          set +e
+          set -o pipefail
+          {
+            python3 "$PRODUCTION_DIR/04_validators/render/validate_canonical_gold_psu_v1.py"
+            rc=$?; test "$rc" = 0 || exit "$rc"
+            python3 "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" \
+              --source-dir "$SOURCE_DIR" --source-repo "$SOURCE_REPO" \
+              --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA" \
+              --output-dir "$COMPILED"
+          } 2>&1 | tee "$COMPILED/production-compile.log"
+          rc=${PIPESTATUS[0]}
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "terminal_line=$(tail -n 1 "$COMPILED/production-compile.log" | tr '\n\r' '  ' | cut -c1-500)" >> "$GITHUB_OUTPUT"
+          if [[ "$rc" = 0 ]]; then
+            echo "closure_sha256=$(python3 -c 'import json;print(json.load(open("'"$COMPILED/psu_closure_receipt.json"'"))["psu_closure_sha256"])')" >> "$GITHUB_OUTPUT"
+            echo "compiler_sha256=$(sha256sum "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "event_graph_sha256=$(sha256sum "$COMPILED/executable_event_graph.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "minute_plan_sha256=$(sha256sum "$COMPILED/minute_window_index.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "shot_ir_sha256=$(sha256sum "$COMPILED/resolved_shot_ir.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "scene_ir_sha256=$(sha256sum "$COMPILED/resolved_scene_ir.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+            echo "runtime_binding_sha256=$(sha256sum "$COMPILED/runtime_binding_manifest.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+
+      - uses: actions/setup-node@v4
+        if: steps.compile.outcome == 'success'
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Typecheck exact deterministic runtime
+        if: steps.compile.outcome == 'success'
+        id: typecheck
+        continue-on-error: true
+        working-directory: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set +e
+          set -o pipefail
+          npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "$COMPILED/npm-ci.log"
+          rc=${PIPESTATUS[0]}
+          if [[ "$rc" = 0 ]]; then npm run typecheck 2>&1 | tee "$COMPILED/typecheck.log"; rc=${PIPESTATUS[0]}; fi
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "terminal_line=$(tail -n 1 "$COMPILED/typecheck.log" 2>/dev/null | tr '\n\r' '  ' | cut -c1-500)" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        id: upload
+        with:
+          name: canonical-gold-psu-exact-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: |
+            ${{ env.OUT }}
+            ${{ env.COMPILED }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish exact terminal receipt
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          ## Canonical Gold PSU exact inventory and compile receipt
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          PRODUCTION_SHA=${PRODUCTION_SHA}
+          SOURCE_GATE=${{ steps.source_gate.outcome }}
+          SOURCE_GATE_TERMINAL=${{ steps.source_gate.outputs.terminal_line }}
+          INVENTORY_SHA256=${{ steps.inventory.outputs.inventory_sha256 || 'NOT_MATERIALIZED' }}
+          PACKAGE_FILE_COUNT=${{ steps.inventory.outputs.package_file_count || 'NOT_MATERIALIZED' }}
+          EXTERNAL_DEPENDENCY_FILE_COUNT=${{ steps.inventory.outputs.external_file_count || 'NOT_MATERIALIZED' }}
+          COMPILE_GATE=${{ steps.compile.outcome || 'NOT_RUN' }}
+          COMPILE_TERMINAL=${{ steps.compile.outputs.terminal_line || 'NOT_RUN' }}
+          TYPECHECK_GATE=${{ steps.typecheck.outcome || 'NOT_RUN' }}
+          TYPECHECK_TERMINAL=${{ steps.typecheck.outputs.terminal_line || 'NOT_RUN' }}
+          PSU_CLOSURE_SHA256=${{ steps.compile.outputs.closure_sha256 || 'NOT_MATERIALIZED' }}
+          COMPILER_SHA256=${{ steps.compile.outputs.compiler_sha256 || 'NOT_MATERIALIZED' }}
+          EVENT_GRAPH_SHA256=${{ steps.compile.outputs.event_graph_sha256 || 'NOT_MATERIALIZED' }}
+          MINUTE_PLAN_SHA256=${{ steps.compile.outputs.minute_plan_sha256 || 'NOT_MATERIALIZED' }}
+          SHOT_IR_SHA256=${{ steps.compile.outputs.shot_ir_sha256 || 'NOT_MATERIALIZED' }}
+          SCENE_IR_SHA256=${{ steps.compile.outputs.scene_ir_sha256 || 'NOT_MATERIALIZED' }}
+          RUNTIME_BINDING_SHA256=${{ steps.compile.outputs.runtime_binding_sha256 || 'NOT_MATERIALIZED' }}
+          PRIVATE_CONTENT_INCLUDED=false
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${RECEIPT_PR}/comments" -f body="$body" >/dev/null
+
+      - name: Enforce exact gates
+        if: steps.source_gate.outcome != 'success' || steps.compile.outcome != 'success' || steps.typecheck.outcome != 'success'
+        run: exit 2

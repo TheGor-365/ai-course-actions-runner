@@ -1,0 +1,39 @@
+{
+  "schema_version": "GoldS01PrivatePreviewGapMatrix_v1",
+  "reference_cell": "M1_L01_S01_RU",
+  "profile_id": "M1_L01_S01_RU_GOLD_V2_PRIVATE_PREVIEW_V1",
+  "observed_runner_base": "f55ced2b2730052bb63ff8ac436e178eee37fae6",
+  "live_authority_map": "docs/gold_s01_private_preview_live_authority_v1.json",
+  "capabilities": {
+    "locked_linux_host_inventory": "EXACT_PROBE_READY_HUMAN_OWNER_EXECUTION_REQUIRED",
+    "node_lock": "CAPTURED_BY_SANITIZED_HOST_RECEIPT",
+    "package_manager_lock": "CAPTURED_BY_SANITIZED_HOST_RECEIPT",
+    "remotion_runtime_lock": "PASS_PACKAGE_LOCK_REMOTION_4.0.489",
+    "chromium_browser_lock": "CAPTURED_BY_SANITIZED_HOST_RECEIPT",
+    "ffmpeg_lock": "REQUIRED_6.1.1-3ubuntu5_AND_EXECUTABLE_HASH",
+    "ffprobe_lock": "REQUIRED_6.1.1-3ubuntu5_AND_EXECUTABLE_HASH",
+    "font_hashes": "BOUNDED_SANS_SERIF_AND_MONOSPACE_ALIAS_FILES",
+    "disk_space_permissions": "EXACT_PROBE_READY",
+    "primary_store": "RWRD_PROBE_READY",
+    "replica_store": "RWRD_PROBE_READY",
+    "registration_restore": "IMPLEMENTED_SYNTHETIC_GREEN_REAL_RECEIPTS_PENDING_RENDER",
+    "failure_injection_resume": "IMPLEMENTED_SYNTHETIC_GREEN_REAL_RUN_PENDING_RENDER",
+    "idempotent_request_rebind": "IMPLEMENTED_FAIL_CLOSED_ON_STALE_OR_FAILED_AUTHORITIES"
+  },
+  "accepted_input_state": {
+    "audio_timing": "ACCEPTED_HANDOFF_AVAILABLE_UNRESOLVED_ROWS_0",
+    "final_ru_captions": "ACCEPTED_HANDOFF_AVAILABLE",
+    "visual_successor": "AVAILABLE_PR_349",
+    "visual_exact_gate": "FAIL_SUMMARY_MISMATCH",
+    "host_lock_receipt": "PENDING_LOCKED_HOST_EXECUTION",
+    "store_probe_receipt": "PENDING_LOCKED_HOST_EXECUTION"
+  },
+  "remaining_blockers": ["VISUAL_EXACT_GATE_PASS_ABSENT", "LOCKED_HOST_RECEIPTS_NOT_RETURNED"],
+  "actions_pre_step_failure_classification": "PRE_STEP_INFRASTRUCTURE_FAILURE_NOT_PRIVATE_MEDIA_OR_CODE_VERDICT",
+  "private_profile_implemented": true,
+  "request_validator_green": true,
+  "final_render_executed": false,
+  "public_media_artifacts_created": false,
+  "private_content_public_exposure": false,
+  "no_fake_green": true
+}

@@ -1,0 +1,21 @@
+name: Legacy Gold S01 Pilot PR v6 Retired
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "ERROR_CODE=LEGACY_WORKFLOW_SUPERSEDED"
+          echo "SUCCESSOR=.github/workflows/canonical-gold-s01-minute-proofs-v1.yml"
+          echo "PILOT_MUST_BE_CONTIGUOUS=true"
+          echo "PILOT_AUDIO_REQUIRED=true"
+          echo "PILOT_CAPTIONS_REQUIRED=true"
+          echo "FULL_15_MINUTE_RENDER_AUTHORIZED=false"
+          echo "NO_FAKE_GREEN=true"
+          exit 2
