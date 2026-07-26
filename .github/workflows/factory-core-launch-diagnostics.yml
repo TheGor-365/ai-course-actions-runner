@@ -74,6 +74,7 @@ jobs:
                 11_tools/factory_core/state_registry_sync.py \
                 11_tools/factory_core/launch_hardening.py \
                 11_tools/factory_core/gold_s01_real.py \
+                11_tools/factory_core/gold_s01_authority.py \
                 11_tools/factory_core/gold_s01_authority_v2.py \
                 11_tools/factory_core/runner14_compat.py \
                 11_tools/run_factory_core.py \
