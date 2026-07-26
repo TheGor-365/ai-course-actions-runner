@@ -18,6 +18,8 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: write
+  issues: write
 
 concurrency:
   group: canonical-gold-psu-inventory-v1-${{ github.event.pull_request.number || github.ref_name }}
@@ -34,6 +36,7 @@ jobs:
       SOURCE_DIR: ${{ github.workspace }}/source
       OUT: ${{ github.workspace }}/inventory-output
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      RECEIPT_PR: "19"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +56,7 @@ jobs:
           test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
 
       - name: Build sanitized package inventory
+        id: inventory
         run: |
           set -euo pipefail
           mkdir -p "$OUT"
@@ -60,8 +64,11 @@ jobs:
             --repo "$SOURCE_DIR" \
             --source-repo "$SOURCE_REPO" \
             --source-sha "$SOURCE_SHA" \
-            --output "$OUT/source_inventory.json"
+            --output "$OUT/source_inventory.json" | tee "$OUT/inventory.log"
           sha256sum "$OUT/source_inventory.json" > "$OUT/SHA256SUMS.txt"
+          echo "inventory_sha256=$(sha256sum "$OUT/source_inventory.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "package_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["package_file_count"])')" >> "$GITHUB_OUTPUT"
+          echo "external_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["external_dependency_file_count"])')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         id: upload
@@ -70,6 +77,28 @@ jobs:
           path: ${{ env.OUT }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish sanitized run receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          ## Canonical Gold PSU inventory proof
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          INVENTORY_SHA256=${{ steps.inventory.outputs.inventory_sha256 }}
+          PACKAGE_FILE_COUNT=${{ steps.inventory.outputs.package_file_count }}
+          EXTERNAL_DEPENDENCY_FILE_COUNT=${{ steps.inventory.outputs.external_file_count }}
+          PRIVATE_CONTENT_INCLUDED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${RECEIPT_PR}/comments" -f body="$body" >/dev/null
 
       - name: Emit receipt
         run: |
