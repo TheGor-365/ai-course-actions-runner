@@ -32,7 +32,7 @@
   },
   "factory_id": "AI_COURSE_FACTORY",
   "final_ru_captions_sha256": "5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18",
-  "fixed_production_adapter_path": "11_tools/render_factory/gold_s01_visual_v2/public_runner_bridge_v2.py",
+  "fixed_production_adapter_path": "11_tools/render_factory/gold_s01_visual_v2/public_runner_bridge_v3.py",
   "legacy_private_host_path": "LEGACY_COMPATIBILITY_ONLY",
   "media_in_git_allowed": false,
   "no_fake_green": true,
