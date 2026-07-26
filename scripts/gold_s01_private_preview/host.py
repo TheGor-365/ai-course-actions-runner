@@ -4,6 +4,10 @@ from .common import *
 from .contracts import validate_profile, require_private_execution_host
 
 
+_BROWSER_VERSION = re.compile(r"\b(?:Chromium|Google Chrome|Chrome for Testing)\b", re.IGNORECASE)
+_BROWSER_BINARY_NAMES = {"chrome", "chromium", "chromium-browser"}
+
+
 def _first_line(argv: Sequence[str]) -> str | None:
     try:
         proc = subprocess.run(list(argv), text=True, capture_output=True, check=False, timeout=15)
@@ -17,22 +21,85 @@ def _tool_identity(command: str) -> dict[str, Any] | None:
     resolved = shutil.which(command)
     if not resolved:
         return None
-    path = Path(resolved).resolve()
+    launcher = Path(resolved)
+    path = launcher.resolve()
     return {
         "command": command,
-        "version": _first_line([str(path), "--version"]),
+        "version": _first_line([str(launcher), "--version"]),
         "executable_sha256": sha256_file(path),
         "size_bytes": path.stat().st_size,
         "filename": path.name,
     }
 
 
+def _snap_browser_binary(command: str) -> tuple[Path, str] | None:
+    package = "chromium" if command in {"chromium", "chromium-browser"} else command
+    current = Path("/snap") / package / "current"
+    if not current.exists():
+        return None
+    try:
+        revision = current.resolve().name
+    except OSError:
+        return None
+    candidates: list[Path] = []
+    for name in sorted(_BROWSER_BINARY_NAMES):
+        try:
+            for path in current.rglob(name):
+                if path.is_file() and os.access(path, os.X_OK):
+                    try:
+                        if path.stat().st_size >= 1_000_000:
+                            candidates.append(path)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    if not candidates:
+        return None
+    binary = max(candidates, key=lambda item: item.stat().st_size)
+    return binary, revision
+
+
 def _browser_identity(candidates: Sequence[str]) -> dict[str, Any] | None:
     for command in candidates:
-        identity = _tool_identity(command)
-        if identity:
-            identity["selected_candidate"] = command
-            return identity
+        resolved = shutil.which(command)
+        if not resolved:
+            continue
+        launcher = Path(resolved)
+        version = _first_line([str(launcher), "--version"])
+        if not version or not _BROWSER_VERSION.search(version):
+            continue
+        resolved_launcher = launcher.resolve()
+        packaging = "native"
+        binary = resolved_launcher
+        snap_revision: str | None = None
+        if resolved_launcher.name == "snap":
+            discovered = _snap_browser_binary(command)
+            if discovered is None:
+                continue
+            binary, snap_revision = discovered
+            packaging = "snap"
+        if binary.name == "snap" or binary.name not in _BROWSER_BINARY_NAMES:
+            continue
+        try:
+            size = binary.stat().st_size
+        except OSError:
+            continue
+        if size < 1_000_000:
+            continue
+        identity: dict[str, Any] = {
+            "command": command,
+            "selected_candidate": command,
+            "version": version,
+            "executable_sha256": sha256_file(binary),
+            "size_bytes": size,
+            "filename": binary.name,
+            "packaging": packaging,
+            "launcher_filename": launcher.name,
+            "launcher_sha256": sha256_file(resolved_launcher),
+        }
+        if snap_revision is not None:
+            identity["snap_revision"] = snap_revision
+        return identity
     return None
 
 
@@ -143,7 +210,7 @@ def host_probe(profile: Mapping[str, Any], private_root: Path, *, production_dir
             receipt["blockers"].append(f"{command.upper()}_MISSING")
     receipt["browser"] = _browser_identity(policy["browser_candidates"])
     if receipt["browser"] is None:
-        receipt["blockers"].append("CHROMIUM_BROWSER_MISSING")
+        receipt["blockers"].append("CHROMIUM_BROWSER_EXACT_IDENTITY_MISSING")
     for alias in policy["required_font_aliases"]:
         identity = _font_identity(alias)
         if identity is None:
@@ -255,6 +322,17 @@ def validate_host_locks(receipt: Mapping[str, Any], profile: Mapping[str, Any], 
     if not isinstance(browser, Mapping):
         raise PreviewError("HOST_BROWSER_IDENTITY_MISSING", "browser")
     require_hex(browser.get("executable_sha256"), 64, "host.browser.executable_sha256")
+    require_hex(browser.get("launcher_sha256"), 64, "host.browser.launcher_sha256")
+    if not _BROWSER_VERSION.search(str(browser.get("version") or "")):
+        raise PreviewError("HOST_BROWSER_VERSION_INVALID", str(browser.get("version")))
+    if browser.get("filename") == "snap" or browser.get("filename") not in _BROWSER_BINARY_NAMES:
+        raise PreviewError("HOST_BROWSER_BINARY_INVALID", str(browser.get("filename")))
+    if int(browser.get("size_bytes") or 0) < 1_000_000:
+        raise PreviewError("HOST_BROWSER_BINARY_INVALID", str(browser.get("size_bytes")))
+    if browser.get("packaging") not in {"native", "snap"}:
+        raise PreviewError("HOST_BROWSER_PACKAGING_INVALID", str(browser.get("packaging")))
+    if browser.get("packaging") == "snap" and not str(browser.get("snap_revision") or "").strip():
+        raise PreviewError("HOST_BROWSER_SNAP_REVISION_MISSING", "snap_revision")
     aliases = {item.get("alias") for item in receipt.get("fonts", []) if isinstance(item, Mapping)}
     if aliases != set(profile["host_lock_policy"]["required_font_aliases"]):
         raise PreviewError("HOST_FONT_ALIAS_SET_MISMATCH", ",".join(sorted(str(x) for x in aliases)))
