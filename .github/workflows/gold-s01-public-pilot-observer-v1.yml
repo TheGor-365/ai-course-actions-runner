@@ -6,6 +6,11 @@ on:
       - repair/gold-s01-public-media-runner-v1
     paths:
       - ".github/workflows/gold-s01-public-pilot-observer-v1.yml"
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/gold-s01-public-pilot-observer-v1.yml"
 
 permissions:
   contents: read
