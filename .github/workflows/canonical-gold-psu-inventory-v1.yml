@@ -55,24 +55,34 @@ jobs:
           git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
           test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
 
-      - name: Validate canonical source and build sanitized inventory
+      - name: Validate canonical source
+        id: source_gate
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT"
+          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
+            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" 2>&1 | tee "$OUT/source-validator.log"
+          rc=${PIPESTATUS[0]}
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "terminal_line=$(tail -n 1 "$OUT/source-validator.log" | tr '\n\r' '  ' | cut -c1-300)" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Build sanitized inventory
+        if: steps.source_gate.outcome == 'success'
         id: inventory
         run: |
           set -euo pipefail
-          mkdir -p "$OUT"
-          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
-            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" | tee "$OUT/source-validator.jsonl"
           python3 scripts/canonical_gold_psu_inventory_v1.py \
-            --repo "$SOURCE_DIR" \
-            --source-repo "$SOURCE_REPO" \
-            --source-sha "$SOURCE_SHA" \
-            --output "$OUT/source_inventory.json" | tee "$OUT/inventory.log"
+            --repo "$SOURCE_DIR" --source-repo "$SOURCE_REPO" --source-sha "$SOURCE_SHA" \
+            --output "$OUT/source_inventory.json" 2>&1 | tee "$OUT/inventory.log"
           sha256sum "$OUT/source_inventory.json" > "$OUT/SHA256SUMS.txt"
           echo "inventory_sha256=$(sha256sum "$OUT/source_inventory.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "package_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["package_file_count"])')" >> "$GITHUB_OUTPUT"
           echo "external_file_count=$(python3 -c 'import json;print(json.load(open("'"$OUT/source_inventory.json"'"))["external_dependency_file_count"])')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
+        if: always()
         id: upload
         with:
           name: canonical-gold-psu-inventory-${{ env.SOURCE_SHA }}
@@ -80,21 +90,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish sanitized run receipt
+      - name: Publish sanitized terminal receipt
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           body=$(cat <<EOF
-          ## Canonical Gold PSU inventory proof
+          ## Canonical Gold PSU inventory terminal receipt
 
           \`\`\`text
           RUN_ID=${GITHUB_RUN_ID}
           ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
           SOURCE_SHA=${SOURCE_SHA}
-          INVENTORY_SHA256=${{ steps.inventory.outputs.inventory_sha256 }}
-          PACKAGE_FILE_COUNT=${{ steps.inventory.outputs.package_file_count }}
-          EXTERNAL_DEPENDENCY_FILE_COUNT=${{ steps.inventory.outputs.external_file_count }}
+          SOURCE_GATE=${{ steps.source_gate.outcome }}
+          SOURCE_GATE_EXIT=${{ steps.source_gate.outputs.exit_code }}
+          SOURCE_GATE_TERMINAL=${{ steps.source_gate.outputs.terminal_line }}
+          INVENTORY_SHA256=${{ steps.inventory.outputs.inventory_sha256 || 'NOT_MATERIALIZED' }}
+          PACKAGE_FILE_COUNT=${{ steps.inventory.outputs.package_file_count || 'NOT_MATERIALIZED' }}
+          EXTERNAL_DEPENDENCY_FILE_COUNT=${{ steps.inventory.outputs.external_file_count || 'NOT_MATERIALIZED' }}
           PRIVATE_CONTENT_INCLUDED=false
           FULL_15_MINUTE_RENDERED=false
           HUMAN_FINAL_PREVIEW_ACCEPTED=false
@@ -104,12 +118,6 @@ jobs:
           )
           gh api "repos/${GITHUB_REPOSITORY}/issues/${RECEIPT_PR}/comments" -f body="$body" >/dev/null
 
-      - name: Emit receipt
-        run: |
-          set -euo pipefail
-          echo "SOURCE_SHA=$SOURCE_SHA"
-          echo "INVENTORY_ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}"
-          echo "PRIVATE_CONTENT_INCLUDED=false"
-          echo "FULL_15_MINUTE_RENDERED=false"
-          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
-          echo "NO_FAKE_GREEN=true"
+      - name: Enforce source gate
+        if: steps.source_gate.outcome != 'success'
+        run: exit 2
