@@ -24,10 +24,10 @@ jobs:
       PROFILE: config/gold_s01_public_media_profile_v1.json
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-public-render-candidate-v1
-      PRIVATE_SHA: 517198a088644ba772f84a26cc04ef8a984846b8
+      PRIVATE_SHA: 46c85fe4f3ec068cba913dc7f397ef8313befb10
       REQUEST_PATH: 05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_v1.json
-      REQUEST_BLOB: 11cfc950ef82323652fd2481f1b8fdd57d8b0141
-      REQUEST_DECLARED_SHA256: 2191390aa7582c318ef14288e8053522b5de7b5209cdae75f884f43d1871b94f
+      REQUEST_BLOB: 23761dc2838b2f1da1531346933abb16d19d4eba
+      REQUEST_DECLARED_SHA256: d15222d5c35f36152491daf665129dbbb8d1c8e435c176b1be16cae97c3d8fce
       REQUEST_ID: M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_V1
       PRIVATE_DIR: ${{ github.workspace }}/private-production
       OUT: ${{ github.workspace }}/pilot-output
