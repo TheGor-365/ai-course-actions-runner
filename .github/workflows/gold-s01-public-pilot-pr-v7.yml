@@ -1,6 +1,11 @@
 name: Gold S01 Public Pilot PR v7
 
 on:
+  push:
+    branches:
+      - repair/gold-s01-public-media-runner-v1
+    paths:
+      - ".github/workflows/gold-s01-public-pilot-pr-v7.yml"
   pull_request:
     branches:
       - launch/factory-5d
