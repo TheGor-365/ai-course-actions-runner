@@ -42,8 +42,8 @@ jobs:
       - name: Validate runner contour
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/gold_s01_public_media_v1.py scripts/gold_s01_public_request_binding_v1.py
-          python3 scripts/gold_s01_public_media_v1.py validate-profile --profile "$PROFILE"
+          python3 -m py_compile scripts/gold_s01_public_media_v1.py scripts/gold_s01_public_media_v2.py scripts/gold_s01_public_request_binding_v1.py
+          python3 scripts/gold_s01_public_media_v2.py validate-profile --profile "$PROFILE"
           python3 tests/test_gold_s01_public_media.py -v
 
       - name: Install hosted system dependencies
@@ -81,7 +81,7 @@ jobs:
         id: preflight
         run: |
           set -euo pipefail
-          python3 scripts/gold_s01_public_media_v1.py preflight \
+          python3 scripts/gold_s01_public_media_v2.py preflight \
             --profile "$PROFILE" --private-dir "$PRIVATE_DIR" \
             --private-repo "$PRIVATE_REPO" --private-branch "$PRIVATE_BRANCH" --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
@@ -114,7 +114,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$OUT" "$PREFLIGHT"
-          python3 scripts/gold_s01_public_media_v1.py render \
+          python3 scripts/gold_s01_public_media_v2.py render \
             --profile "$PROFILE" --private-dir "$PRIVATE_DIR" \
             --private-repo "$PRIVATE_REPO" --private-branch "$PRIVATE_BRANCH" --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
@@ -161,7 +161,7 @@ jobs:
         if: steps.render.outcome == 'success'
         run: |
           set -euo pipefail
-          python3 scripts/gold_s01_public_media_v1.py verify-download \
+          python3 scripts/gold_s01_public_media_v2.py verify-download \
             --artifact-dir "${{ github.workspace }}/pilot-download" \
             --artifact-name "gold-s01-pilot-60s-${PRIVATE_SHA}-${{ steps.render.outputs.input_fingerprint }}" \
             --expected-sha256 "${{ steps.render.outputs.mp4_sha256 }}" \
