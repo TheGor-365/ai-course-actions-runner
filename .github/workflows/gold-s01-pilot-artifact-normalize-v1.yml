@@ -1,0 +1,127 @@
+name: Gold S01 Pilot Artifact Normalize v1
+
+on:
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/gold-s01-pilot-artifact-normalize-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_ARTIFACT_ID: 8634734438
+      SOURCE_RUN_ID: 30211890504
+      EXPECTED_MP4_SHA256: 1a389f74e1566e13a2ebab2f65fa432a62de1b16fa78c09e430c79ecd8fe20fc
+      CANONICAL_MP4: M1_L01_S01_RU_pilot_60s_v1.mp4
+      PRIVATE_SHA: 7e6d2e880a135b9c1ad08ddb96096debe2bb348a
+      INPUT_FINGERPRINT: edd9519d326f7e18b02b0b0d0e9b12ae6c13315cb42c56f99f6df8d480e324cf
+    steps:
+      - name: Download source artifact by exact ID
+        run: |
+          set -euo pipefail
+          mkdir -p source normalized
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > source.zip
+          unzip -q source.zip -d source
+
+      - name: Verify source artifact identities and QC
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          root = Path('source')
+          mp4s = sorted(root.rglob('*.mp4'))
+          assert len(mp4s) == 2, [str(p) for p in mp4s]
+          expected = '1a389f74e1566e13a2ebab2f65fa432a62de1b16fa78c09e430c79ecd8fe20fc'
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          observed = [sha(path) for path in mp4s]
+          assert observed == [expected, expected], observed
+          canonical = root / 'M1_L01_S01_RU_pilot_60s_v1.mp4'
+          assert canonical.is_file()
+
+          qc = json.loads((root / 'qc.json').read_text(encoding='utf-8'))
+          adapter = json.loads((root / 'adapter_qc.json').read_text(encoding='utf-8'))
+          receipt = json.loads((root / 'sanitized_execution_receipt.json').read_text(encoding='utf-8'))
+          assert qc['machine_qc_green'] is True
+          assert adapter['status'] == 'PASS'
+          assert receipt['status'] == 'PASS'
+          assert receipt['mp4_sha256'] == expected
+          assert receipt['private_sha'] == '7e6d2e880a135b9c1ad08ddb96096debe2bb348a'
+          print('SOURCE_TWO_MP4S_BYTE_IDENTICAL=true')
+          print('SOURCE_MACHINE_QC_GREEN=true')
+          PY
+
+      - name: Build one-MP4 canonical owner artifact
+        run: |
+          set -euo pipefail
+          cp "source/${CANONICAL_MP4}" normalized/
+          cp source/ffprobe.json source/qc.json source/adapter_qc.json source/sanitized_execution_receipt.json normalized/
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          root = Path('normalized')
+          expected = '1a389f74e1566e13a2ebab2f65fa432a62de1b16fa78c09e430c79ecd8fe20fc'
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          files = sorted(root.iterdir(), key=lambda p: p.name)
+          assert len(list(root.glob('*.mp4'))) == 1
+          assert sha(root / 'M1_L01_S01_RU_pilot_60s_v1.mp4') == expected
+          (root / 'SHA256SUMS.txt').write_text(
+              ''.join(f'{sha(path)}  {path.name}\n' for path in files),
+              encoding='utf-8',
+          )
+          manifest = {
+              'schema_version': 'GoldS01PilotOwnerReviewArtifact_v1',
+              'status': 'MACHINE_QC_GREEN_OWNER_REVIEW_REQUIRED',
+              'source_run_id': 30211890504,
+              'source_artifact_id': 8634734438,
+              'private_sha': '7e6d2e880a135b9c1ad08ddb96096debe2bb348a',
+              'input_fingerprint': 'edd9519d326f7e18b02b0b0d0e9b12ae6c13315cb42c56f99f6df8d480e324cf',
+              'mp4_filename': 'M1_L01_S01_RU_pilot_60s_v1.mp4',
+              'mp4_sha256': expected,
+              'machine_qc_green': True,
+              'human_final_preview_accepted': False,
+              'no_fake_green': True,
+          }
+          (root / 'owner_review_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
+      - name: Upload canonical owner-review artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-canonical-${{ env.PRIVATE_SHA }}-${{ env.INPUT_FINGERPRINT }}
+          path: normalized/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Re-download canonical artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-canonical-${{ env.PRIVATE_SHA }}-${{ env.INPUT_FINGERPRINT }}
+          path: downloaded
+
+      - name: Verify canonical download
+        run: |
+          set -euo pipefail
+          test "$(find downloaded -type f -name '*.mp4' | wc -l)" -eq 1
+          observed="$(sha256sum "downloaded/${CANONICAL_MP4}" | awk '{print $1}')"
+          test "$observed" = "$EXPECTED_MP4_SHA256"
+          echo "NORMALIZED_ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}"
+          echo "PILOT_60S_RENDERED=true"
+          echo "PILOT_MACHINE_QC_GREEN=true"
+          echo "PUBLIC_ARTIFACT_DOWNLOAD_HASH_VERIFIED=true"
+          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+          echo "NO_FAKE_GREEN=true"
