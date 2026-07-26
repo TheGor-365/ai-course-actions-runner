@@ -25,8 +25,15 @@ def _validate_audio_handoff(value: Mapping[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(dict(value))
 
 
-def _validate_visual_handoff(value: Mapping[str, Any]) -> dict[str, Any]:
-    required = {"schema_version", "runner_pr", "runner_head", "private_pr", "private_branch", "private_sha", "result", "production_adapter_git_blob_sha", "no_render_manifest_path", "no_render_manifest_git_blob_sha", "no_render_manifest_sha256", "visual_input_fingerprint", "private_render_request_sha256", "shot_ir_count", "scene_ir_count", "receipt_hash", "no_fake_green"}
+def _validate_visual_handoff(value: Mapping[str, Any], profile: Mapping[str, Any]) -> dict[str, Any]:
+    required = {
+        "schema_version", "runner_pr", "runner_head", "private_pr", "private_branch", "private_sha", "result",
+        "production_adapter_path", "production_adapter_git_blob_sha", "full_composition_id",
+        "full_composition_registered", "execution_authorized", "final_render_authorized",
+        "private_render_request_status", "no_render_manifest_path", "no_render_manifest_git_blob_sha",
+        "no_render_manifest_sha256", "visual_input_fingerprint", "private_render_request_sha256",
+        "shot_ir_count", "scene_ir_count", "receipt_hash", "no_fake_green",
+    }
     require_fields(value, required, "visual_handoff")
     if value["schema_version"] != VISUAL_HANDOFF_SCHEMA or value["no_fake_green"] is not True:
         raise PreviewError("VISUAL_HANDOFF_SCHEMA_INVALID", "schema/no_fake_green")
@@ -37,7 +44,18 @@ def _validate_visual_handoff(value: Mapping[str, Any]) -> dict[str, Any]:
         raise PreviewError("VISUAL_GATE_PR_MISMATCH", "15/349")
     require_hex(value["runner_head"], 40, "visual_handoff.runner_head")
     require_hex(value["private_sha"], 40, "visual_handoff.private_sha")
+    adapter_path = safe_relative(value["production_adapter_path"], "visual_handoff.production_adapter_path")
+    if adapter_path != profile["fixed_production_adapter_path"]:
+        raise PreviewError("PRODUCTION_ADAPTER_PATH_MISMATCH", adapter_path)
     require_hex(value["production_adapter_git_blob_sha"], 40, "visual_handoff.production_adapter_git_blob_sha")
+    if not isinstance(value["full_composition_id"], str) or not SAFE_ID.fullmatch(value["full_composition_id"]):
+        raise PreviewError("FULL_COMPOSITION_ID_INVALID", str(value.get("full_composition_id")))
+    if value["full_composition_registered"] is not True:
+        raise PreviewError("FULL_COMPOSITION_NOT_REGISTERED", str(value["full_composition_registered"]))
+    if value["execution_authorized"] is not True or value["final_render_authorized"] is not True:
+        raise PreviewError("VISUAL_RENDER_AUTHORITY_ABSENT", f"execution={value['execution_authorized']},final={value['final_render_authorized']}")
+    if value["private_render_request_status"] != "EXECUTION_AUTHORIZED_EXACT_INPUTS":
+        raise PreviewError("VISUAL_REQUEST_STATUS_NOT_AUTHORIZED", str(value["private_render_request_status"]))
     safe_relative(value["no_render_manifest_path"], "visual_handoff.no_render_manifest_path")
     require_hex(value["no_render_manifest_git_blob_sha"], 40, "visual_handoff.no_render_manifest_git_blob_sha")
     for field in ("no_render_manifest_sha256", "visual_input_fingerprint", "private_render_request_sha256"):
@@ -53,7 +71,7 @@ def rebind_request(provisional: Mapping[str, Any], audio_handoff: Mapping[str, A
     if current["execution_authorized"] is True or current["validation_status"] != "PROVISIONAL_BLOCKED":
         raise PreviewError("REBIND_SOURCE_NOT_PROVISIONAL", current["validation_status"])
     audio = _validate_audio_handoff(audio_handoff)
-    visual = _validate_visual_handoff(visual_handoff)
+    visual = _validate_visual_handoff(visual_handoff, profile)
     validate_host_locks(host_receipt, profile)
     validate_store_probe_receipt(store_receipt, profile)
     require_hex(runner_sha, 40, "rebind.runner_sha")
