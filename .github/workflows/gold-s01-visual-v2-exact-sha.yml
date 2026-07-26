@@ -18,7 +18,7 @@ jobs:
     env:
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
-      PRIVATE_SHA: 42d9a351f4085639fc0c0813ee9cef31cdbc0b37
+      PRIVATE_SHA: a4943794f19af0c761be56fbcc8d3906add01b17
       PRIVATE_PR: 349
       RUNNER_PR: 15
       STATUS_CONTEXT: public-runner/gold-s01/visual-v2-no-render
@@ -29,92 +29,80 @@ jobs:
       - uses: actions/checkout@v4
       - name: Gate policy tests
         run: |
-          set -euo pipefail
           python3 -m py_compile scripts/gold_s01_visual_v2_gate.py tests/test_gold_s01_visual_v2_gate.py
           python3 -m unittest tests/test_gold_s01_visual_v2_gate.py
-      - name: Fixed policy guard
+      - name: Fixed target guard
         run: |
-          set -euo pipefail
           test -n "${PRIVATE_REPO_PAT:-}"
           test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
           test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
-          test "$PRIVATE_SHA" = "42d9a351f4085639fc0c0813ee9cef31cdbc0b37"
+          test "$PRIVATE_SHA" = "a4943794f19af0c761be56fbcc8d3906add01b17"
           test "$PRIVATE_PR" = "349"
           test "$RUNNER_PR" = "15"
-          echo "public_artifact_policy=none"
-          echo "private_content_public_exposure=false"
       - name: Write pending private status
-        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 visual v2 exact-SHA gate started" "$RUN_URL"
-      - name: Checkout exact private SHA
+        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 visual v2 exact package gate started" "$RUN_URL"
+      - name: Checkout exact private package head
         id: checkout
         run: |
-          set -euo pipefail
           TARGET="$RUNNER_TEMP/private-production"
           git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$TARGET" >/dev/null 2>&1
           git -C "$TARGET" fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
-          OBSERVED="$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")"
-          test "$OBSERVED" = "$PRIVATE_SHA"
+          test "$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")" = "$PRIVATE_SHA"
           git -C "$TARGET" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
           test "$(git -C "$TARGET" rev-parse HEAD)" = "$PRIVATE_SHA"
           echo "private_dir=$TARGET" >> "$GITHUB_OUTPUT"
-      - name: Run exact Gold S01 visual gate
+      - name: Run fixed exact package gate
         id: gate
         continue-on-error: true
         run: |
-          set +e
           OUTPUT="$RUNNER_TEMP/gold-s01-visual-gate.txt"
+          set +e
           python3 scripts/gold_s01_visual_v2_gate.py \
             --private-dir "${{ steps.checkout.outputs.private_dir }}" \
             --private-repo "$PRIVATE_REPO" \
             --private-branch "$PRIVATE_BRANCH" \
             --private-sha "$PRIVATE_SHA" > "$OUTPUT" 2>&1
           RC=$?
+          set -e
           cat "$OUTPUT"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
-          for key in result error_code error_detail diagnostic_hash test_count semantic_units shot_ir_count scene_ir_count assets_materialized no_render_manifest_sha256 visual_input_fingerprint typescript_typecheck committed_package timing_bound final_render_authorized actual_asset_registry_sha256 actual_component_source_sha256 actual_no_render_manifest_sha256 actual_private_render_request_sha256 actual_representative_source_sha256 actual_runtime_source_sha256 actual_scene_ir_sha256 actual_shot_ir_sha256 actual_visual_input_fingerprint; do
+          for key in result error_code diagnostic_hash private_sha visual_runtime_head test_count semantic_units shot_ir_count scene_ir_count assets_materialized active_document_count no_render_manifest_sha256 visual_input_fingerprint package_manifest_sha256 private_render_request_sha256 typescript_typecheck committed_package clean_rebuilds_byte_identical stale_embedded_hash_rejected timing_bound final_render_authorized; do
             value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
             echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
           done
-          echo "summary_hash=$(sha256sum "$OUTPUT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           exit 0
       - name: Build sanitized receipt
         if: ${{ always() }}
         run: |
           RECEIPT="$RUNNER_TEMP/receipt.md"
           {
-            echo "## Gold S01 visual v2 exact-SHA gate"
+            echo "## Gold S01 visual v2 exact package gate"
             echo
             echo '```text'
             echo "RUNNER_SHA=${{ github.sha }}"
             echo "PUBLIC_RUN_ID=${{ github.run_id }}"
             echo "PRIVATE_SHA=$PRIVATE_SHA"
-            echo "PRIVATE_PR=$PRIVATE_PR"
             echo "RESULT=${{ steps.gate.outputs.result }}"
             echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
             echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
-            echo "ERROR_DETAIL=${{ steps.gate.outputs.error_detail }}"
             echo "DIAGNOSTIC_HASH=${{ steps.gate.outputs.diagnostic_hash }}"
+            echo "VISUAL_RUNTIME_HEAD=${{ steps.gate.outputs.visual_runtime_head }}"
             echo "TEST_COUNT=${{ steps.gate.outputs.test_count }}"
             echo "SEMANTIC_UNITS=${{ steps.gate.outputs.semantic_units }}"
             echo "SHOT_IR_COUNT=${{ steps.gate.outputs.shot_ir_count }}"
             echo "SCENE_IR_COUNT=${{ steps.gate.outputs.scene_ir_count }}"
             echo "ASSETS_MATERIALIZED=${{ steps.gate.outputs.assets_materialized }}"
+            echo "ACTIVE_DOCUMENT_COUNT=${{ steps.gate.outputs.active_document_count }}"
             echo "NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.no_render_manifest_sha256 }}"
             echo "VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.visual_input_fingerprint }}"
+            echo "PACKAGE_MANIFEST_SHA256=${{ steps.gate.outputs.package_manifest_sha256 }}"
+            echo "PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.private_render_request_sha256 }}"
             echo "TYPESCRIPT_TYPECHECK=${{ steps.gate.outputs.typescript_typecheck }}"
             echo "COMMITTED_PACKAGE=${{ steps.gate.outputs.committed_package }}"
+            echo "CLEAN_REBUILDS_BYTE_IDENTICAL=${{ steps.gate.outputs.clean_rebuilds_byte_identical }}"
+            echo "STALE_EMBEDDED_HASH_REJECTED=${{ steps.gate.outputs.stale_embedded_hash_rejected }}"
             echo "TIMING_BOUND=${{ steps.gate.outputs.timing_bound }}"
             echo "FINAL_RENDER_AUTHORIZED=${{ steps.gate.outputs.final_render_authorized }}"
-            echo "ACTUAL_COMPONENT_SOURCE_SHA256=${{ steps.gate.outputs.actual_component_source_sha256 }}"
-            echo "ACTUAL_RUNTIME_SOURCE_SHA256=${{ steps.gate.outputs.actual_runtime_source_sha256 }}"
-            echo "ACTUAL_REPRESENTATIVE_SOURCE_SHA256=${{ steps.gate.outputs.actual_representative_source_sha256 }}"
-            echo "ACTUAL_ASSET_REGISTRY_SHA256=${{ steps.gate.outputs.actual_asset_registry_sha256 }}"
-            echo "ACTUAL_SHOT_IR_SHA256=${{ steps.gate.outputs.actual_shot_ir_sha256 }}"
-            echo "ACTUAL_SCENE_IR_SHA256=${{ steps.gate.outputs.actual_scene_ir_sha256 }}"
-            echo "ACTUAL_NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.actual_no_render_manifest_sha256 }}"
-            echo "ACTUAL_VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.actual_visual_input_fingerprint }}"
-            echo "ACTUAL_PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.actual_private_render_request_sha256 }}"
-            echo "SANITIZED_SUMMARY_HASH=${{ steps.gate.outputs.summary_hash }}"
             echo "MEDIA_RENDERED=false"
             echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
             echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
@@ -123,61 +111,25 @@ jobs:
             echo '```'
           } > "$RECEIPT"
           cat "$RECEIPT"
-      - name: Write receipt to private PR
+      - name: Write receipt to production PR
         if: ${{ always() }}
         run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/receipt.md"
-      - name: Write diagnostic receipt to runner PR
+      - name: Refresh runner PR body
         if: ${{ always() }}
-        run: gh pr comment "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/receipt.md"
-      - name: Refresh runner PR diagnostic body
-        if: ${{ always() }}
-        run: |
-          BODY="$RUNNER_TEMP/runner-pr-body.md"
-          {
-            echo "## Exact private target"
-            echo
-            echo '```text'
-            echo "PRIVATE_REPO=$PRIVATE_REPO"
-            echo "PRIVATE_BRANCH=$PRIVATE_BRANCH"
-            echo "PRIVATE_SHA=$PRIVATE_SHA"
-            echo "PRIVATE_PR=$PRIVATE_PR"
-            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
-            echo "RESULT=${{ steps.gate.outputs.result }}"
-            echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
-            echo "ACTUAL_COMPONENT_SOURCE_SHA256=${{ steps.gate.outputs.actual_component_source_sha256 }}"
-            echo "ACTUAL_RUNTIME_SOURCE_SHA256=${{ steps.gate.outputs.actual_runtime_source_sha256 }}"
-            echo "ACTUAL_REPRESENTATIVE_SOURCE_SHA256=${{ steps.gate.outputs.actual_representative_source_sha256 }}"
-            echo "ACTUAL_ASSET_REGISTRY_SHA256=${{ steps.gate.outputs.actual_asset_registry_sha256 }}"
-            echo "ACTUAL_SHOT_IR_SHA256=${{ steps.gate.outputs.actual_shot_ir_sha256 }}"
-            echo "ACTUAL_SCENE_IR_SHA256=${{ steps.gate.outputs.actual_scene_ir_sha256 }}"
-            echo "ACTUAL_NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.actual_no_render_manifest_sha256 }}"
-            echo "ACTUAL_VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.actual_visual_input_fingerprint }}"
-            echo "ACTUAL_PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.actual_private_render_request_sha256 }}"
-            echo "TIMING_BOUND=false"
-            echo "FINAL_RENDER_AUTHORIZED=false"
-            echo "MEDIA_RENDERED=false"
-            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
-            echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
-            echo "NO_FAKE_GREEN=true"
-            echo '```'
-            echo
-            echo "Fixed execution-only gate. It verifies exact checkout, 36 Python tests, committed ShotIR/SceneIR identities, full Remotion TypeScript typecheck, and binary-media prohibition. A PASS is not timing acceptance, render completion, Human Owner acceptance, production GREEN, or release GREEN."
-          } > "$BODY"
-          gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
+        run: gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/receipt.md"
       - name: Write final private status
         if: ${{ always() }}
         run: |
           if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
-            state=success; description="Gold S01 visual v2 exact-SHA gate passed"
+            state=success
+            description="Gold S01 visual v2 exact package gate passed"
           else
-            state=failure; description="Gold S01 visual v2 exact-SHA gate failed: ${{ steps.gate.outputs.error_code }}"
+            state=failure
+            description="Gold S01 visual v2 exact package gate failed"
           fi
           bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$state" "$description" "$RUN_URL"
       - name: Final assertion
         if: ${{ always() }}
         run: |
-          set -euo pipefail
           test "${{ steps.gate.outputs.result }}" = "PASS"
           test "${{ steps.gate.outputs.exit_code }}" = "0"
-          echo "public_media_artifacts_created=false"
-          echo "private_content_public_exposure=false"
