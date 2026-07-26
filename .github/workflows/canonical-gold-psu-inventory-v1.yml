@@ -71,7 +71,7 @@ jobs:
           exit "$rc"
 
       - name: Build sanitized inventory
-        if: steps.source_gate.outcome == 'success'
+        if: always()
         id: inventory
         run: |
           set -euo pipefail
