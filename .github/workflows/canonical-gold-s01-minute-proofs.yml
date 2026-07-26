@@ -1,0 +1,427 @@
+name: Canonical Gold S01 Minute Proofs
+
+on:
+  workflow_dispatch:
+    inputs:
+      authority_manifest_path:
+        description: Committed exact authority manifest path
+        required: true
+        type: string
+        default: config/canonical_gold_s01_exact_inputs_v2.json
+      execute_media:
+        description: Render only after the exact A-E gate passes
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: canonical-gold-s01-minute-proofs-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: TheGor-365/ai-course-source-library
+  PRODUCTION_REPO: TheGor-365/ai-course-production-system
+  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+  WORK: ${{ github.workspace }}/work
+  SOURCE_DIR: ${{ github.workspace }}/work/source
+  PRODUCTION_DIR: ${{ github.workspace }}/work/production
+  INPUT_DIR: ${{ github.workspace }}/work/inputs
+  COMPILED_DIR: ${{ github.workspace }}/work/compiled
+  PILOT_A_DIR: ${{ github.workspace }}/work/pilot_a
+  PILOT_B_DIR: ${{ github.workspace }}/work/pilot_b
+  RECEIPT_DIR: ${{ github.workspace }}/work/receipts
+
+jobs:
+  canonical-minute-proofs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: 01_checkout_runner
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: 02_clone_exact_source
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "worker/canonical-gold-s01-minute-proofs-v2"
+          test -n "$PRIVATE_REPO_PAT"
+          mkdir -p "$WORK" "$RECEIPT_DIR"
+          source_sha=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_RECONCILED)
+          lane_a=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_LANE_A)
+          lane_b=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_LANE_B)
+          source_branch=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_BRANCH_RECONCILED)
+          git init -q "$SOURCE_DIR"
+          git -C "$SOURCE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/${source_branch}" | awk '{print $1}')" = "$source_sha"
+          git -C "$SOURCE_DIR" fetch -q --filter=blob:none origin "$source_sha" "$lane_a" "$lane_b"
+          git -C "$SOURCE_DIR" checkout -q --detach "$source_sha"
+          git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$source_sha"
+          test -z "$(git -C "$SOURCE_DIR" status --porcelain)"
+
+      - name: 03_clone_exact_production
+        run: |
+          set -euo pipefail
+          production_sha=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_RECONCILED)
+          lane_c=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_C)
+          lane_d=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_D)
+          lane_e=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_E)
+          oc_head=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key OC_HEAD)
+          production_branch=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_BRANCH_RECONCILED)
+          git init -q "$PRODUCTION_DIR"
+          git -C "$PRODUCTION_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
+          test "$(git -C "$PRODUCTION_DIR" ls-remote origin "refs/heads/${production_branch}" | awk '{print $1}')" = "$production_sha"
+          git -C "$PRODUCTION_DIR" fetch -q --filter=blob:none origin "$production_sha" "$lane_c" "$lane_d" "$lane_e" "$oc_head"
+          git -C "$PRODUCTION_DIR" checkout -q --detach "$production_sha"
+          git -C "$PRODUCTION_DIR" remote set-url origin "https://github.com/${PRODUCTION_REPO}.git"
+          test "$(git -C "$PRODUCTION_DIR" rev-parse HEAD)" = "$production_sha"
+          test -z "$(git -C "$PRODUCTION_DIR" status --porcelain)"
+
+      - name: 04_verify_OC_and_lane_receipts
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-authority \
+            --manifest "${{ inputs.authority_manifest_path }}" \
+            --source-dir "$SOURCE_DIR" \
+            --production-dir "$PRODUCTION_DIR" \
+            --receipt "$RECEIPT_DIR/04_authority_receipt.json"
+          test "${{ inputs.execute_media }}" = "true"
+
+      - name: 05_verify_PSU_closure
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_psu_closure \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+            --manifest "${{ inputs.authority_manifest_path }}" --key PSU_CLOSURE_SHA256 \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+
+      - name: 06_run_reference_compiler
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage run_reference_compiler \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          for key in SHARED_ID_REGISTRY_SHA256 COMPILER_SHA256; do
+            python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+              --manifest "${{ inputs.authority_manifest_path }}" --key "$key" \
+              --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+          done
+
+      - name: 07_run_premium_production_compiler
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage run_premium_production_compiler \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          for key in PREMIUM_SHOT_SPEC_SHA256 ShotIR_SHA256 SceneIR_SHA256; do
+            python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+              --manifest "${{ inputs.authority_manifest_path }}" --key "$key" \
+              --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+          done
+
+      - name: 08_verify_assets
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_assets \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+            --manifest "${{ inputs.authority_manifest_path }}" --key ASSET_MANIFEST_SHA256 \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+
+      - name: 09_verify_runtime_binding
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_runtime_binding \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+            --manifest "${{ inputs.authority_manifest_path }}" --key RUNTIME_BINDING_SHA256 \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+
+      - name: 10_run_no_render_QC
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage run_no_render_qc \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
+            --manifest "${{ inputs.authority_manifest_path }}" --key QC_MANIFEST_SHA256 \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
+
+      - name: 11_install_node_and_browser
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg unzip jq fontconfig fonts-dejavu-core fonts-liberation
+          remotion_root=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key REMOTION_ROOT)
+          cd "$PRODUCTION_DIR/$remotion_root"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx remotion browser ensure
+
+      - name: 12_discover_compositions
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage discover_compositions \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
+
+      - name: 13_download_A3483
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$INPUT_DIR/audio"
+          gh release download gold-s01-a3483-input-v1 \
+            --repo TheGor-365/ai-course-actions-runner \
+            --pattern M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav \
+            --dir "$INPUT_DIR/audio"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-audio \
+            --manifest "${{ inputs.authority_manifest_path }}" \
+            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
+            --receipt "$RECEIPT_DIR/13_audio_receipt.json"
+
+      - name: 14_materialize_and_verify_captions
+        env:
+          CAPTION_ARTIFACT_REPO: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_REPO }}
+          CAPTION_ARTIFACT_ID: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ID }}
+          CAPTION_ARTIFACT_ZIP_SHA256: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ZIP_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$CAPTION_ARTIFACT_REPO"
+          test -n "$CAPTION_ARTIFACT_ID"
+          test -n "$CAPTION_ARTIFACT_ZIP_SHA256"
+          test "$CAPTION_ARTIFACT_REPO" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_REPOSITORY)"
+          test "$CAPTION_ARTIFACT_ID" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_ID)"
+          test "$CAPTION_ARTIFACT_ZIP_SHA256" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_ZIP_SHA256)"
+          mkdir -p "$INPUT_DIR/captions" "$WORK/caption-pack"
+          zip="$WORK/accepted-captions.zip"
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer ${PRIVATE_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${CAPTION_ARTIFACT_REPO}/actions/artifacts/${CAPTION_ARTIFACT_ID}/zip" \
+            --output "$zip"
+          test "$(sha256sum "$zip" | awk '{print $1}')" = "$CAPTION_ARTIFACT_ZIP_SHA256"
+          unzip -q "$zip" -d "$WORK/caption-pack"
+          mapfile -t jsons < <(find "$WORK/caption-pack" -type f -name s01_ru_final_captions_v01.json)
+          mapfile -t vtts < <(find "$WORK/caption-pack" -type f -name s01_ru_final_captions_v01.vtt)
+          test "${#jsons[@]}" = 1
+          test "${#vtts[@]}" = 1
+          cp "${jsons[0]}" "$INPUT_DIR/captions/s01_ru_final_captions_v01.json"
+          cp "${vtts[0]}" "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-captions \
+            --manifest "${{ inputs.authority_manifest_path }}" \
+            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
+            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
+            --receipt "$RECEIPT_DIR/14_caption_receipt.json"
+
+      - name: 15_render_Pilot_A_visual
+        run: |
+          set -euo pipefail
+          mkdir -p "$PILOT_A_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage render_pilot_a_visual \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_A_DIR"
+
+      - name: 16_extract_Pilot_A_audio_window
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py extract-audio \
+            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
+            --start-ms 0 --duration-ms 60000 \
+            --output "$PILOT_A_DIR/audio_window.wav" \
+            --receipt "$PILOT_A_DIR/audio_window_receipt.json"
+
+      - name: 17_extract_Pilot_A_caption_window
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py caption-window \
+            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_a \
+            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
+            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
+            --output-dir "$PILOT_A_DIR"
+
+      - name: 18_mux_Pilot_A
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y \
+            -i "$PILOT_A_DIR/visual.mp4" -i "$PILOT_A_DIR/audio_window.wav" \
+            -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 320k -shortest \
+            "$PILOT_A_DIR/pilot_a.mp4"
+          rm -f "$PILOT_A_DIR/visual.mp4" "$PILOT_A_DIR/audio_window.wav"
+          ffprobe -v error -show_format -show_streams -of json "$PILOT_A_DIR/pilot_a.mp4" > "$PILOT_A_DIR/ffprobe.json"
+
+      - name: 19_run_Pilot_A_event_and_media_QC
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage run_pilot_a_event_and_media_qc \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_A_DIR"
+
+      - name: 20_render_Pilot_B_visual
+        run: |
+          set -euo pipefail
+          mkdir -p "$PILOT_B_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-pilot-b-selection \
+            --manifest "${{ inputs.authority_manifest_path }}" \
+            --events "$COMPILED_DIR/event_telemetry_plan.json" \
+            --selection "$COMPILED_DIR/pilot_b_selection.json" \
+            --receipt "$RECEIPT_DIR/20_pilot_b_selection_receipt.json"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage render_pilot_b_visual \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_B_DIR"
+
+      - name: 21_extract_Pilot_B_audio_window
+        run: |
+          set -euo pipefail
+          start_ms=$(python3 -c 'import json;print(json.load(open("'"$COMPILED_DIR/pilot_b_selection.json"'"))["start_ms"])')
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py extract-audio \
+            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
+            --start-ms "$start_ms" --duration-ms 60000 \
+            --output "$PILOT_B_DIR/audio_window.wav" \
+            --receipt "$PILOT_B_DIR/audio_window_receipt.json"
+
+      - name: 22_extract_Pilot_B_caption_window
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py caption-window \
+            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_b \
+            --selection "$COMPILED_DIR/pilot_b_selection.json" \
+            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
+            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
+            --output-dir "$PILOT_B_DIR"
+
+      - name: 23_mux_Pilot_B
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y \
+            -i "$PILOT_B_DIR/visual.mp4" -i "$PILOT_B_DIR/audio_window.wav" \
+            -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 320k -shortest \
+            "$PILOT_B_DIR/pilot_b.mp4"
+          rm -f "$PILOT_B_DIR/visual.mp4" "$PILOT_B_DIR/audio_window.wav"
+          ffprobe -v error -show_format -show_streams -of json "$PILOT_B_DIR/pilot_b.mp4" > "$PILOT_B_DIR/ffprobe.json"
+
+      - name: 24_run_Pilot_B_code_event_and_media_QC
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage run_pilot_b_code_event_and_media_qc \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_B_DIR"
+
+      - name: 25_build_contact_sheets
+        run: |
+          set -euo pipefail
+          for pilot in "$PILOT_A_DIR/pilot_a.mp4" "$PILOT_B_DIR/pilot_b.mp4"; do
+            dir=$(dirname "$pilot")
+            ffmpeg -hide_banner -loglevel error -y -i "$pilot" \
+              -vf "fps=1/6,scale=480:-1,tile=5x2" -frames:v 1 "$dir/contact_sheet.png"
+          done
+
+      - name: 26_build_owner_evidence
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
+            --manifest "${{ inputs.authority_manifest_path }}" --stage build_owner_evidence \
+            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$WORK"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py package \
+            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_a \
+            --pilot-dir "$PILOT_A_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py package \
+            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_b \
+            --pilot-dir "$PILOT_B_DIR" --receipt-dir "$RECEIPT_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py sanitize-artifact --artifact-dir "$PILOT_A_DIR"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py sanitize-artifact --artifact-dir "$PILOT_B_DIR"
+
+      - name: 27_upload_canonical_artifacts
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-gold-s01-pilot-a-${{ github.run_id }}
+          path: ${{ env.PILOT_A_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 27_upload_canonical_artifacts_Pilot_B
+        id: upload_b
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-gold-s01-pilot-b-${{ github.run_id }}
+          path: ${{ env.PILOT_B_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 28_redownload_artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/redownload/a" "$WORK/redownload/b"
+          for spec in \
+            "${{ steps.upload.outputs.artifact-id }}|$WORK/redownload/a/a.zip|$WORK/redownload/a" \
+            "${{ steps.upload_b.outputs.artifact-id }}|$WORK/redownload/b/b.zip|$WORK/redownload/b"; do
+            IFS='|' read -r id zip dir <<< "$spec"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$zip"
+            unzip -q "$zip" -d "$dir/unpacked"
+          done
+
+      - name: 29_verify_MP4_hashes
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-artifact \
+            --artifact-dir "$WORK/redownload/a/unpacked" \
+            --expected "$PILOT_A_DIR/owner_review_manifest.json" \
+            --receipt "$RECEIPT_DIR/29_pilot_a_identity.json"
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-artifact \
+            --artifact-dir "$WORK/redownload/b/unpacked" \
+            --expected "$PILOT_B_DIR/owner_review_manifest.json" \
+            --receipt "$RECEIPT_DIR/29_pilot_b_identity.json"
+
+      - name: 30_writeback_receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+            --jq '.jobs[] | select(.name=="canonical-minute-proofs") | .id' | head -n1)
+          test -n "$job_id"
+          summary=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py final-summary \
+            --manifest "${{ inputs.authority_manifest_path }}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --job-id "$job_id" \
+            --artifact-a "${{ steps.upload.outputs.artifact-id }}" \
+            --artifact-b "${{ steps.upload_b.outputs.artifact-id }}" \
+            --receipt-dir "$RECEIPT_DIR")
+          for issue in 364 357 344; do
+            gh api "repos/TheGor-365/ai-course-production-system/issues/${issue}/comments" -f body="$summary" >/dev/null
+          done
+          runner_pr=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key RUNNER_PR_NUMBER)
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${runner_pr}/comments" -f body="$summary" >/dev/null
+          python3 scripts/canonical_gold_s01_minute_proofs_v2.py upstream-targets \
+            --manifest "${{ inputs.authority_manifest_path }}" |
+          while IFS='|' read -r repo pr; do
+            gh api "repos/${repo}/issues/${pr}/comments" -f body="$summary" >/dev/null
+          done
