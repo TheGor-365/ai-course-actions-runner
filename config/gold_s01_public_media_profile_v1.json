@@ -4,7 +4,7 @@
   "artifact_retention_days": 30,
   "dynamic_script_path_allowed": false,
   "execution_layer": "public_github_hosted_runner",
-  "expected_composition_id": "GoldS01FullVisualMaster",
+  "expected_composition_id": "GoldS01HybridFull15m",
   "expected_outputs": {
     "full_15m": {
       "adapter_qc_filename": "adapter_qc.json",
@@ -32,7 +32,7 @@
   },
   "factory_id": "AI_COURSE_FACTORY",
   "final_ru_captions_sha256": "5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18",
-  "fixed_production_adapter_path": "11_tools/render_factory/gold_s01_private_execution_v1.py",
+  "fixed_production_adapter_path": "11_tools/render_factory/gold_s01_visual_v2/public_runner_bridge_v2.py",
   "legacy_private_host_path": "LEGACY_COMPATIBILITY_ONLY",
   "media_in_git_allowed": false,
   "no_fake_green": true,
@@ -44,7 +44,7 @@
   "public_workflow_execution_allowed": true,
   "raw_provider_payloads_in_artifacts_allowed": false,
   "reference_cell": "M1_L01_S01_RU",
-  "remotion_index_path": "11_tools/render_factory/remotion/src/index.tsx",
+  "remotion_index_path": "11_tools/render_factory/remotion/src/goldS01VisualV2/productionRoot.tsx",
   "required_adapter_qc_checks": [
     "blank_frame_pass",
     "unexpected_frozen_frame_pass",
@@ -76,12 +76,7 @@
   "schema_version": "gold-s01-public-media-profile-v1",
   "secrets_in_artifacts_allowed": false,
   "writeback_targets": {
-    "issue_numbers": [
-      350,
-      346,
-      348,
-      344
-    ],
+    "issue_numbers": [350, 346, 348, 344],
     "repository": "TheGor-365/ai-course-production-system"
   }
 }
