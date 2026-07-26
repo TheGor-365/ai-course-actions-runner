@@ -113,14 +113,14 @@ jobs:
         id: render
         run: |
           set -o pipefail
-          mkdir -p "$OUT"
+          mkdir -p "$OUT" "$PREFLIGHT"
           python3 scripts/gold_s01_public_media_v1.py render \
             --profile "$PROFILE" --private-dir "$PRIVATE_DIR" \
             --private-repo "$PRIVATE_REPO" --private-branch "$PRIVATE_BRANCH" --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
             --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
             --render-mode pilot_60s --request-id "$REQUEST_ID" \
-            --output-dir "$OUT" --github-output "$GITHUB_OUTPUT" 2>&1 | tee "$OUT/runtime.log"
+            --output-dir "$OUT" --github-output "$GITHUB_OUTPUT" 2>&1 | tee "$PREFLIGHT/runtime.log"
 
       - name: Upload failure evidence
         if: failure() && steps.preflight.outcome == 'success'
@@ -128,7 +128,7 @@ jobs:
         with:
           name: gold-s01-pilot-runtime-failure-${{ env.PRIVATE_SHA }}
           path: |
-            ${{ env.OUT }}/runtime.log
+            ${{ env.PREFLIGHT }}/runtime.log
             ${{ env.OUT }}/adapter_qc.json
             ${{ env.PREFLIGHT }}/*.json
           if-no-files-found: warn
