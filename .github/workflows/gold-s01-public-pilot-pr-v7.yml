@@ -24,10 +24,10 @@ jobs:
       PROFILE: config/gold_s01_public_media_profile_v1.json
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-public-render-candidate-v1
-      PRIVATE_SHA: db3946f3992a4a8a2955625197d7954f93154b9f
+      PRIVATE_SHA: 7e6d2e880a135b9c1ad08ddb96096debe2bb348a
       REQUEST_PATH: 05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_v1.json
-      REQUEST_BLOB: 7a2e6ad8c2101dd83fa71ac2176431183704ec91
-      REQUEST_DECLARED_SHA256: e78d80f7758821808681f0f5d532978c40c4c41692538e547654a4cff127068f
+      REQUEST_BLOB: 7b4637931ce15c79fb498e050ef2e529009dcb96
+      REQUEST_DECLARED_SHA256: 5fbc138f016d79188deb65a815d383c5386761a3718d4d0db7c4c6a14e054c6f
       REQUEST_ID: M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_V1
       PRIVATE_DIR: ${{ github.workspace }}/private-production
       OUT: ${{ github.workspace }}/pilot-output
@@ -60,7 +60,7 @@ jobs:
           git -C "$PRIVATE_DIR" init -q
           git -C "$PRIVATE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git"
           test "$(git -C "$PRIVATE_DIR" ls-remote origin "refs/heads/${PRIVATE_BRANCH}" | awk '{print $1}')" = "$PRIVATE_SHA"
-          git -C "$PRIVATE_DIR" fetch -q --depth=50 origin "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" fetch -q --depth=60 origin "$PRIVATE_SHA"
           git -C "$PRIVATE_DIR" checkout -q --detach "$PRIVATE_SHA"
           git -C "$PRIVATE_DIR" remote set-url origin "https://github.com/${PRIVATE_REPO}.git"
           test "$(git -C "$PRIVATE_DIR" rev-parse HEAD)" = "$PRIVATE_SHA"
