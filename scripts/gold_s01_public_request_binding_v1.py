@@ -30,6 +30,10 @@ def canonical_bytes(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def self_hash_bytes(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -92,7 +96,7 @@ def validate_binding(args: argparse.Namespace) -> int:
         raise BindingError("DECLARED_REQUEST_HASH_MISMATCH", str(request.get("request_sha256")))
     self_hash_input = dict(request)
     self_hash_input.pop("request_sha256", None)
-    observed_declared_hash = hashlib.sha256(canonical_bytes(self_hash_input)).hexdigest()
+    observed_declared_hash = hashlib.sha256(self_hash_bytes(self_hash_input)).hexdigest()
     if observed_declared_hash != args.request_sha256:
         raise BindingError("REQUEST_SELF_HASH_MISMATCH", observed_declared_hash)
     raw_hash = sha256_file(request_file)
