@@ -141,7 +141,7 @@ jobs:
         with:
           name: gold-s01-pilot-60s-${{ env.PRIVATE_SHA }}-${{ steps.render.outputs.input_fingerprint }}
           path: |
-            ${{ env.OUT }}/*.mp4
+            ${{ env.OUT }}/M1_L01_S01_RU_pilot_60s_v1.mp4
             ${{ env.OUT }}/ffprobe.json
             ${{ env.OUT }}/qc.json
             ${{ env.OUT }}/adapter_qc.json
