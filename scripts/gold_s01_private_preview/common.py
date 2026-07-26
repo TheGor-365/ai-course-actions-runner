@@ -21,6 +21,9 @@ from typing import Any, Callable, Mapping, Sequence
 PROFILE_ID = "M1_L01_S01_RU_GOLD_V2_PRIVATE_PREVIEW_V1"
 REQUEST_SCHEMA = "GoldS01PrivatePreviewRequest_v1"
 HOST_RECEIPT_SCHEMA = "GoldS01HostLockReceipt_v1"
+STORE_PROBE_RECEIPT_SCHEMA = "GoldS01StoreProbeReceipt_v1"
+REBIND_RECEIPT_SCHEMA = "GoldS01RequestRebindReceipt_v1"
+AUTHORITY_MAP_SCHEMA = "GoldS01LiveAuthorityMap_v1"
 STATION_RECEIPT_SCHEMA = "GoldS01StationRunReceipt_v1"
 ARTIFACT_RECEIPT_SCHEMA = "GoldS01ArtifactReceipt_v1"
 REGISTRATION_SCHEMA = "GoldS01PrimaryRegistrationReceipt_v1"
@@ -37,6 +40,7 @@ A3483_SHA256 = "74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352
 DEFAULT_PRIMARY_CLASS = "private-content-addressed-primary-v1"
 DEFAULT_REPLICA_CLASS = "private-content-addressed-replica-v1"
 DEFAULT_OWNER_CLASS = "private-owner-review-local-capability-v1"
+CONTROL_BINDING_MODE = "external-exact-head-request-blob-v1"
 
 
 class PreviewError(ValueError):
@@ -64,6 +68,14 @@ def canonical_bytes(value: Any) -> bytes:
 def canonical_hash(value: Mapping[str, Any], *, omit: set[str] | None = None) -> str:
     omitted = omit or set()
     return hashlib.sha256(canonical_bytes({k: copy.deepcopy(v) for k, v in value.items() if k not in omitted})).hexdigest()
+
+
+def validate_embedded_hash(value: Mapping[str, Any], field: str = "receipt_hash") -> None:
+    observed = value.get(field)
+    require_hex(observed, 64, field)
+    expected = canonical_hash(value, omit={field})
+    if observed != expected:
+        raise PreviewError("RECEIPT_HASH_MISMATCH", field)
 
 
 def sha256_file(path: Path) -> str:
@@ -139,6 +151,13 @@ def validate_git_checkout(repo: Path, expected_sha: str, *, clean: bool = True) 
         raise PreviewError("EXACT_HEAD_DRIFT", expected_sha)
     if clean and git_output(repo, "status", "--porcelain"):
         raise PreviewError("CHECKOUT_DIRTY", repo.name)
+
+
+def validate_ancestor(repo: Path, ancestor_sha: str, head_sha: str) -> None:
+    try:
+        subprocess.check_call(["git", "-C", str(repo), "merge-base", "--is-ancestor", ancestor_sha, head_sha], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        raise PreviewError("CONTROL_BASE_NOT_ANCESTOR", ancestor_sha) from exc
 
 
 def validate_blob(repo: Path, path: str, expected_blob: str, expected_sha256: str | None = None) -> Path:
