@@ -1,0 +1,383 @@
+name: Canonical Gold S01 Minute Proofs v1
+
+on:
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/canonical-gold-s01-minute-proofs-v1.yml"
+      - "config/canonical_gold_s01_minute_profile_v1.json"
+      - "scripts/canonical_gold_s01_minute_runner_v1.py"
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-s01-minute-proofs-v1.yml"
+      - "config/canonical_gold_s01_minute_profile_v1.json"
+      - "scripts/canonical_gold_s01_minute_runner_v1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: canonical-gold-s01-minute-proofs-v1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  canonical-no-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PROFILE: config/canonical_gold_s01_minute_profile_v1.json
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf
+      PRODUCTION_REPO: TheGor-365/ai-course-production-system
+      PRODUCTION_BRANCH: repair/m1-l01-s01-canonical-psu-compiler-v1
+      PRODUCTION_SHA: 74b015b78c60110361f71a7cff5a50794bee0f21
+      SOURCE_DIR: ${{ github.workspace }}/canonical-source
+      PRODUCTION_DIR: ${{ github.workspace }}/canonical-production
+      COMPILED_DIR: ${{ github.workspace }}/canonical-compiled
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Validate public runner contour
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/canonical_gold_s01_minute_runner_v1.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('config/canonical_gold_s01_minute_profile_v1.json').read_text())
+          assert p['source']['sha'] == 'e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf'
+          assert p['production']['sha'] == '74b015b78c60110361f71a7cff5a50794bee0f21'
+          assert p['full_15_minute_render_authorized'] is False
+          assert p['pilots']['contiguous_required'] is True
+          assert p['pilots']['audio_required'] is True
+          assert p['pilots']['captions_required'] is True
+          assert p['pilots']['capability_montage_allowed'] is False
+          PY
+
+      - name: Clone exact source and production heads
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          for spec in \
+            "$SOURCE_DIR|$SOURCE_REPO|$SOURCE_BRANCH|$SOURCE_SHA" \
+            "$PRODUCTION_DIR|$PRODUCTION_REPO|$PRODUCTION_BRANCH|$PRODUCTION_SHA"; do
+            IFS='|' read -r target repo branch sha <<< "$spec"
+            git init -q "$target"
+            git -C "$target" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            test "$(git -C "$target" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')" = "$sha"
+            git -C "$target" fetch -q --depth=1 origin "$sha"
+            git -C "$target" checkout -q --detach "$sha"
+            git -C "$target" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$target" rev-parse HEAD)" = "$sha"
+            test -z "$(git -C "$target" status --porcelain)"
+          done
+
+      - name: Run exact source and production no-render gates
+        id: compile
+        run: |
+          set -euo pipefail
+          mkdir -p "$COMPILED_DIR"
+          python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
+            --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" | tee "$COMPILED_DIR/source-validation.jsonl"
+          python3 "$PRODUCTION_DIR/04_validators/render/validate_canonical_gold_psu_v1.py" | tee "$COMPILED_DIR/production-validation.jsonl"
+          python3 "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" \
+            --source-dir "$SOURCE_DIR" --source-repo "$SOURCE_REPO" \
+            --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA" \
+            --output-dir "$COMPILED_DIR" | tee "$COMPILED_DIR/production-compile.jsonl"
+          echo "closure_sha256=$(python3 -c 'import json;print(json.loads(open("'"$COMPILED_DIR/production-compile.jsonl"'").read().splitlines()[-1])["psu_closure_sha256"])')" >> "$GITHUB_OUTPUT"
+          echo "compiler_sha256=$(sha256sum "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "event_graph_sha256=$(sha256sum "$COMPILED_DIR/executable_event_graph.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "minute_plan_sha256=$(sha256sum "$COMPILED_DIR/minute_window_index.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Typecheck exact production runtime
+        working-directory: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: canonical-gold-s01-no-render-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: ${{ env.COMPILED_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish no-render receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          ## Canonical Gold S01 exact no-render receipt
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          PRODUCTION_SHA=${PRODUCTION_SHA}
+          PSU_CLOSURE_SHA256=${{ steps.compile.outputs.closure_sha256 }}
+          COMPILER_SHA256=${{ steps.compile.outputs.compiler_sha256 }}
+          EVENT_GRAPH_SHA256=${{ steps.compile.outputs.event_graph_sha256 }}
+          MINUTE_PLAN_SHA256=${{ steps.compile.outputs.minute_plan_sha256 }}
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null
+
+  contiguous-minute-proofs:
+    needs: canonical-no-render
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      PROFILE: config/canonical_gold_s01_minute_profile_v1.json
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf
+      PRODUCTION_REPO: TheGor-365/ai-course-production-system
+      PRODUCTION_BRANCH: repair/m1-l01-s01-canonical-psu-compiler-v1
+      PRODUCTION_SHA: 74b015b78c60110361f71a7cff5a50794bee0f21
+      SOURCE_DIR: ${{ github.workspace }}/canonical-source
+      PRODUCTION_DIR: ${{ github.workspace }}/canonical-production
+      COMPILED_DIR: ${{ github.workspace }}/canonical-compiled
+      INPUTS_DIR: ${{ github.workspace }}/inputs
+      OUTPUT_DIR: ${{ github.workspace }}/minute-proofs
+      PREFLIGHT_DIR: ${{ github.workspace }}/preflight
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      CAPTION_ARTIFACT_REPO: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_REPO }}
+      CAPTION_ARTIFACT_ID: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ID }}
+      CAPTION_ARTIFACT_ZIP_SHA256: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ZIP_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install hosted media dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg unzip fontconfig fonts-dejavu-core fonts-liberation
+
+      - name: Clone exact source and production heads
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          for spec in \
+            "$SOURCE_DIR|$SOURCE_REPO|$SOURCE_BRANCH|$SOURCE_SHA" \
+            "$PRODUCTION_DIR|$PRODUCTION_REPO|$PRODUCTION_BRANCH|$PRODUCTION_SHA"; do
+            IFS='|' read -r target repo branch sha <<< "$spec"
+            git init -q "$target"
+            git -C "$target" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            test "$(git -C "$target" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')" = "$sha"
+            git -C "$target" fetch -q --depth=1 origin "$sha"
+            git -C "$target" checkout -q --detach "$sha"
+            git -C "$target" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$target" rev-parse HEAD)" = "$sha"
+          done
+
+      - name: Compile exact canonical package
+        run: |
+          set -euo pipefail
+          mkdir -p "$COMPILED_DIR" "$INPUTS_DIR/audio" "$INPUTS_DIR/captions" "$OUTPUT_DIR" "$PREFLIGHT_DIR"
+          python3 "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py" \
+            --source-dir "$SOURCE_DIR" --source-repo "$SOURCE_REPO" \
+            --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA" \
+            --output-dir "$COMPILED_DIR" | tee "$PREFLIGHT_DIR/production-compile.jsonl"
+
+      - name: Download and verify exact A3483 release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download gold-s01-a3483-input-v1 \
+            --repo TheGor-365/ai-course-actions-runner \
+            --pattern M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav \
+            --dir "$INPUTS_DIR/audio"
+          test "$(sha256sum "$INPUTS_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" | awk '{print $1}')" = "74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352"
+          test "$(stat -c %s "$INPUTS_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav")" = "43603182"
+
+      - name: Materialize exact accepted caption artifact
+        id: captions
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          test -n "$CAPTION_ARTIFACT_REPO"
+          test -n "$CAPTION_ARTIFACT_ID"
+          test -n "$CAPTION_ARTIFACT_ZIP_SHA256"
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer ${PRIVATE_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${CAPTION_ARTIFACT_REPO}/actions/artifacts/${CAPTION_ARTIFACT_ID}/zip" \
+            --output "$PREFLIGHT_DIR/accepted-captions.zip"
+          test "$(sha256sum "$PREFLIGHT_DIR/accepted-captions.zip" | awk '{print $1}')" = "$CAPTION_ARTIFACT_ZIP_SHA256"
+          mkdir -p "$PREFLIGHT_DIR/caption-pack"
+          unzip -q "$PREFLIGHT_DIR/accepted-captions.zip" -d "$PREFLIGHT_DIR/caption-pack"
+          mapfile -t json_files < <(find "$PREFLIGHT_DIR/caption-pack" -type f -name s01_ru_final_captions_v01.json)
+          mapfile -t vtt_files < <(find "$PREFLIGHT_DIR/caption-pack" -type f -name s01_ru_final_captions_v01.vtt)
+          test "${#json_files[@]}" = 1
+          test "${#vtt_files[@]}" = 1
+          cp "${json_files[0]}" "$INPUTS_DIR/captions/s01_ru_final_captions_v01.json"
+          cp "${vtt_files[0]}" "$INPUTS_DIR/captions/s01_ru_final_captions_v01.vtt"
+          test "$(sha256sum "$INPUTS_DIR/captions/s01_ru_final_captions_v01.json" | awk '{print $1}')" = "5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18"
+
+      - name: Run fail-closed media preflight
+        id: preflight
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 scripts/canonical_gold_s01_minute_runner_v1.py preflight \
+            --profile "$PROFILE" --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
+            --inputs-dir "$INPUTS_DIR" --output "$PREFLIGHT_DIR/preflight.json"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.preflight.outcome != 'success'
+        id: upload_blocked
+        with:
+          name: canonical-gold-s01-minute-blocked-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: |
+            ${{ env.PREFLIGHT_DIR }}/preflight.json
+            ${{ env.PREFLIGHT_DIR }}/production-compile.jsonl
+            ${{ env.COMPILED_DIR }}/compiler_output_sha256sums.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish blocked media receipt
+        if: steps.preflight.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          blockers=$(python3 -c 'import json;print(",".join(json.load(open("'"$PREFLIGHT_DIR/preflight.json"'"))["blockers"]))')
+          body=$(cat <<EOF
+          ## Canonical Gold S01 minute media blocked
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload_blocked.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          PRODUCTION_SHA=${PRODUCTION_SHA}
+          BLOCKERS=${blockers}
+          PILOT_A_RENDERED=false
+          PILOT_B_RENDERED=false
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null
+
+      - name: Enforce accepted media inputs
+        if: steps.preflight.outcome != 'success'
+        run: exit 2
+
+      - uses: actions/setup-node@v4
+        if: steps.preflight.outcome == 'success'
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Install Remotion and Chromium
+        if: steps.preflight.outcome == 'success'
+        working-directory: ${{ env.PRODUCTION_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx remotion browser ensure
+
+      - name: Render contiguous Pilot A and Pilot B
+        if: steps.preflight.outcome == 'success'
+        run: |
+          set -euo pipefail
+          for selector in pilot_a pilot_b; do
+            python3 "$PRODUCTION_DIR/11_tools/render_factory/gold_s01_visual_v2/canonical_minute_adapter_v1.py" render-window \
+              --compiled-dir "$COMPILED_DIR" --selector "$selector" \
+              --audio "$INPUTS_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
+              --captions-json "$INPUTS_DIR/captions/s01_ru_final_captions_v01.json" \
+              --captions-vtt "$INPUTS_DIR/captions/s01_ru_final_captions_v01.vtt" \
+              --output-dir "$OUTPUT_DIR"
+          done
+          find "$OUTPUT_DIR" -type f -name '*_visual.mp4' -delete
+          find "$OUTPUT_DIR" -type f -name '*_audio.wav' -delete
+          sha256sum "$OUTPUT_DIR"/* > "$OUTPUT_DIR/SHA256SUMS.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.preflight.outcome == 'success'
+        id: upload_media
+        with:
+          name: canonical-gold-s01-minute-proofs-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/download-artifact@v4
+        if: steps.preflight.outcome == 'success'
+        with:
+          name: canonical-gold-s01-minute-proofs-${{ env.SOURCE_SHA }}-${{ env.PRODUCTION_SHA }}
+          path: ${{ github.workspace }}/downloaded-proofs
+
+      - name: Verify artifact identities and event-QC boundary
+        if: steps.preflight.outcome == 'success'
+        run: |
+          set -euo pipefail
+          for receipt in "$OUTPUT_DIR"/*_receipt.json; do
+            window=$(basename "$receipt" _receipt.json)
+            mkdir -p "$PREFLIGHT_DIR/download-${window}"
+            cp "${{ github.workspace }}/downloaded-proofs/${window}.mp4" "$PREFLIGHT_DIR/download-${window}/"
+            python3 scripts/canonical_gold_s01_minute_runner_v1.py verify-artifact \
+              --artifact-dir "$PREFLIGHT_DIR/download-${window}" \
+              --artifact-name "canonical-gold-s01-minute-proofs-${SOURCE_SHA}-${PRODUCTION_SHA}" \
+              --expected-receipt "$receipt" --output "$OUTPUT_DIR/${window}_download-proof.json"
+            test "$(python3 -c 'import json;print(str(json.load(open("'"$receipt"'"))["machine_qc"]["machine_qc_green"]).lower())')" = true
+          done
+
+      - name: Publish terminal receipt
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          ## Canonical Gold S01 minute workflow terminal status
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          RUNNER_HEAD=${GITHUB_SHA}
+          SOURCE_SHA=${SOURCE_SHA}
+          PRODUCTION_SHA=${PRODUCTION_SHA}
+          JOB_STATUS=${{ job.status }}
+          CAPTION_ARTIFACT_ID=${CAPTION_ARTIFACT_ID:-ABSENT}
+          PILOT_A_ARTIFACT_ID=${{ steps.upload_media.outputs.artifact-id || 'ABSENT' }}
+          PILOT_B_ARTIFACT_ID=${{ steps.upload_media.outputs.artifact-id || 'ABSENT' }}
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null
