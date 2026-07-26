@@ -44,7 +44,11 @@ EXTERNAL_DIRS = [
 
 
 def git(repo: Path, *args: str) -> str:
-    return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+    return subprocess.check_output(
+        ["git", "-C", str(repo), "-c", "core.quotepath=false", *args],
+        text=True,
+        encoding="utf-8",
+    ).strip()
 
 
 def tracked_files(repo: Path, root: Path) -> list[Path]:
@@ -120,8 +124,8 @@ def main() -> int:
         external_paths.extend(tracked_files(repo, directory))
     external_paths = unique_paths(external_paths)
 
-    records = [record(repo, args.source_repo, args.source_sha, p, True) for p in package_files]
-    records.extend(record(repo, args.source_repo, args.source_sha, p, False) for p in external_paths)
+    records = [record(repo, args.source_repo, args.source_sha, path, True) for path in package_files]
+    records.extend(record(repo, args.source_repo, args.source_sha, path, False) for path in external_paths)
     records.sort(key=lambda item: (item["scope"], item["path"]))
 
     payload = {
