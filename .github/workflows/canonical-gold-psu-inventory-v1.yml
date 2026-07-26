@@ -32,7 +32,7 @@ jobs:
     env:
       SOURCE_REPO: TheGor-365/ai-course-source-library
       SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
-      SOURCE_SHA: e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf
+      SOURCE_SHA: 87ad805b6a7f2966058e716faa8c9fcc75ff16f8
       SOURCE_DIR: ${{ github.workspace }}/source
       OUT: ${{ github.workspace }}/inventory-output
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
@@ -59,13 +59,15 @@ jobs:
         id: source_gate
         continue-on-error: true
         run: |
+          set +e
           set -o pipefail
           mkdir -p "$OUT"
           python3 "$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_v2.py" \
             --repo "$SOURCE_DIR" --expected-source-sha "$SOURCE_SHA" 2>&1 | tee "$OUT/source-validator.log"
           rc=${PIPESTATUS[0]}
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
-          echo "terminal_line=$(tail -n 1 "$OUT/source-validator.log" | tr '\n\r' '  ' | cut -c1-300)" >> "$GITHUB_OUTPUT"
+          terminal_line=$(tail -n 1 "$OUT/source-validator.log" | tr '\n\r' '  ' | cut -c1-300)
+          echo "terminal_line=$terminal_line" >> "$GITHUB_OUTPUT"
           exit "$rc"
 
       - name: Build sanitized inventory
