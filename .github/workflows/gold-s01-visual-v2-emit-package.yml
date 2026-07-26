@@ -1,4 +1,4 @@
-name: Gold S01 Visual v2 Emit Pending Package
+name: Gold S01 Visual v2 Emit Pending Document
 on:
   push:
     branches:
@@ -10,7 +10,7 @@ permissions:
   contents: read
   pull-requests: write
 jobs:
-  emit-package:
+  emit-document:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -18,6 +18,7 @@ jobs:
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
       PRIVATE_SHA: ae8dafcc3e5634f07d51b9b0dea07410bd867702
       RUNNER_PR: 15
+      EMIT_FILE: runtime_binding_v1.json
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -38,24 +39,25 @@ jobs:
           test "$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")" = "$PRIVATE_SHA"
           git -C "$TARGET" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
           echo "private_dir=$TARGET" >> "$GITHUB_OUTPUT"
-      - name: Build sanitized pending package bundle
+      - name: Build one canonical pending document
         id: emit
         run: |
-          OUTPUT="$RUNNER_TEMP/package-bundle.txt"
+          OUTPUT="$RUNNER_TEMP/package-document.txt"
           python3 scripts/gold_s01_visual_v2_emit_pending_package.py \
             --private-dir "${{ steps.checkout.outputs.private_dir }}" \
             --private-repo "$PRIVATE_REPO" \
             --private-branch "$PRIVATE_BRANCH" \
-            --private-sha "$PRIVATE_SHA" > "$OUTPUT"
-          for key in result private_sha test_count typescript_typecheck clean_rebuilds_byte_identical package_bundle_b64 runtime_binding_sha256 timing_binding_sha256 no_render_manifest_sha256 visual_input_fingerprint private_render_request_sha256 package_manifest_sha256 timing_bound final_render_authorized; do
+            --private-sha "$PRIVATE_SHA" \
+            --emit-file "$EMIT_FILE" > "$OUTPUT"
+          for key in result private_sha test_count typescript_typecheck clean_rebuilds_byte_identical document_name document_size document_b64 runtime_binding_sha256 timing_binding_sha256 no_render_manifest_sha256 visual_input_fingerprint private_render_request_sha256 package_manifest_sha256 timing_bound final_render_authorized; do
             value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
-      - name: Publish sanitized bundle to runner PR
+      - name: Publish one sanitized document to runner PR
         run: |
           BODY="$RUNNER_TEMP/body.md"
           {
-            echo "## Pending active-package materialization receipt"
+            echo "## Pending active-package document"
             echo
             echo '```text'
             echo "PRIVATE_SHA=${{ steps.emit.outputs.private_sha }}"
@@ -63,6 +65,8 @@ jobs:
             echo "TEST_COUNT=${{ steps.emit.outputs.test_count }}"
             echo "TYPESCRIPT_TYPECHECK=${{ steps.emit.outputs.typescript_typecheck }}"
             echo "CLEAN_REBUILDS_BYTE_IDENTICAL=${{ steps.emit.outputs.clean_rebuilds_byte_identical }}"
+            echo "DOCUMENT_NAME=${{ steps.emit.outputs.document_name }}"
+            echo "DOCUMENT_SIZE=${{ steps.emit.outputs.document_size }}"
             echo "RUNTIME_BINDING_SHA256=${{ steps.emit.outputs.runtime_binding_sha256 }}"
             echo "TIMING_BINDING_SHA256=${{ steps.emit.outputs.timing_binding_sha256 }}"
             echo "NO_RENDER_MANIFEST_SHA256=${{ steps.emit.outputs.no_render_manifest_sha256 }}"
@@ -75,8 +79,8 @@ jobs:
             echo "NO_FAKE_GREEN=true"
             echo '```'
             echo
-            echo "PACKAGE_BUNDLE_B64=${{ steps.emit.outputs.package_bundle_b64 }}"
+            echo "DOCUMENT_B64=${{ steps.emit.outputs.document_b64 }}"
             echo
-            echo "This is a sanitized connector-writeback bundle, not an exact-gate PASS and not render authorization."
+            echo "This is a sanitized connector-writeback document, not an exact-gate PASS and not render authorization."
           } > "$BODY"
           gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
