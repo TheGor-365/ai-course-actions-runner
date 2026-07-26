@@ -2,13 +2,9 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import filecmp
-import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -20,9 +16,10 @@ EXPECTED_TESTS = 42
 
 def run(command: Sequence[str], cwd: Path, env: dict[str, str] | None = None) -> str:
     completed = subprocess.run(list(command), cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    combined = completed.stdout + completed.stderr
     if completed.returncode:
         raise RuntimeError(f"COMMAND_FAILED:{command[0]}:{completed.returncode}")
-    return completed.stdout
+    return combined
 
 
 def main() -> int:
