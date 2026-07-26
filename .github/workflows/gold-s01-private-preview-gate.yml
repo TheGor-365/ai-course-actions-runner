@@ -62,12 +62,12 @@ jobs:
         run: python3 tests/test_gold_s01_private_preview.py T.test_rebind_idempotent_and_stale_rejection -v
       - name: Test station failure resume idempotency
         run: python3 tests/test_gold_s01_private_preview.py T.test_idempotent_failure_resume -v
-      - name: Public runner diagnostic only
+      - name: Legacy private runner diagnostic only
         run: |
           set -euo pipefail
           python3 scripts/gold_s01_private_preview_v1.py public-diagnostic --profile config/gold_s01_private_preview_profile_v1.json
-          echo "PRIVATE_MEDIA_EXECUTED=false"
-          echo "ACTIONS_STEPS_NONE_CLASSIFICATION=PRE_STEP_INFRASTRUCTURE_FAILURE"
+          echo "LEGACY_PRIVATE_HOST_PATH=LEGACY_COMPATIBILITY_ONLY"
+          echo "ACTIVE_PUBLIC_MEDIA_WORKFLOW=.github/workflows/gold-s01-public-media-render.yml"
       - name: Assert no media binaries in Git
         run: |
           set -euo pipefail
@@ -89,15 +89,19 @@ jobs:
           hits=[str(p) for p in paths if leak.search(p.read_text(encoding='utf-8',errors='ignore'))]
           if hits: raise SystemExit('SECRET_OR_RAW_PATH_LEAK='+','.join(hits))
           PY
-      - name: Assert no public artifact upload
+      - name: Assert legacy workflow does not upload public artifacts
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          forbidden='uses: '+'actions/'+'upload-artifact'
-          hits=[str(p) for p in Path('.github/workflows').glob('*.y*') if forbidden in p.read_text(encoding='utf-8')]
-          if hits: raise SystemExit('PUBLIC_ARTIFACT_UPLOAD_PRESENT='+','.join(hits))
+          marker='uses: '+'actions/'+'upload-artifact'
+          legacy=Path('.github/workflows/gold-s01-private-preview-gate.yml')
+          active=Path('.github/workflows/gold-s01-public-media-render.yml')
+          if marker in legacy.read_text(encoding='utf-8'):
+              raise SystemExit('LEGACY_WORKFLOW_PUBLIC_ARTIFACT_UPLOAD_PRESENT')
+          if marker not in active.read_text(encoding='utf-8'):
+              raise SystemExit('ACTIVE_PUBLIC_MEDIA_UPLOAD_MISSING')
           PY
-          echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+          echo "LEGACY_PRIVATE_HOST_PATH=LEGACY_COMPATIBILITY_ONLY"
           echo "PRIVATE_CONTENT_PUBLIC_EXPOSURE=false"
           echo "NO_FAKE_GREEN=true"
