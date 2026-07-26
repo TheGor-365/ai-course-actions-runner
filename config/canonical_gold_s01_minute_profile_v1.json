@@ -13,7 +13,7 @@
   "production": {
     "repository": "TheGor-365/ai-course-production-system",
     "branch": "repair/m1-l01-s01-canonical-psu-compiler-v1",
-    "sha": "fe5e0e07e612ede9afb27da343bc0c9123e7498d",
+    "sha": "74b015b78c60110361f71a7cff5a50794bee0f21",
     "request_path": "05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_CANONICAL_MINUTE_RENDER_v1.json",
     "compiler_path": "11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py",
     "adapter_path": "11_tools/render_factory/gold_s01_visual_v2/canonical_minute_adapter_v1.py",
