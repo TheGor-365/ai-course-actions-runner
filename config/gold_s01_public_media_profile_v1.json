@@ -1,0 +1,87 @@
+{
+  "accepted_timing_sha256": "716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61",
+  "arbitrary_commands_allowed": false,
+  "artifact_retention_days": 30,
+  "dynamic_script_path_allowed": false,
+  "execution_layer": "public_github_hosted_runner",
+  "expected_composition_id": "GoldS01FullVisualMaster",
+  "expected_outputs": {
+    "full_15m": {
+      "adapter_qc_filename": "adapter_qc.json",
+      "audio_codec": "aac_when_included",
+      "clean_visual_master_filename": "M1_L01_S01_RU_visual_master_clean_v1.mp4",
+      "duration_seconds": 900,
+      "duration_tolerance_seconds": 0.5,
+      "fps": 30,
+      "height": 1080,
+      "video_codec": "h264",
+      "video_filename": "M1_L01_S01_RU_full_15m_v1.mp4",
+      "width": 1920
+    },
+    "pilot_60s": {
+      "adapter_qc_filename": "adapter_qc.json",
+      "audio_codec": "aac_when_included",
+      "duration_seconds": 60,
+      "duration_tolerance_seconds": 0.05,
+      "fps": 30,
+      "height": 1080,
+      "video_codec": "h264",
+      "video_filename": "M1_L01_S01_RU_pilot_60s_v1.mp4",
+      "width": 1920
+    }
+  },
+  "factory_id": "AI_COURSE_FACTORY",
+  "final_ru_captions_sha256": "5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18",
+  "fixed_production_adapter_path": "11_tools/render_factory/gold_s01_private_execution_v1.py",
+  "legacy_private_host_path": "LEGACY_COMPATIBILITY_ONLY",
+  "media_in_git_allowed": false,
+  "no_fake_green": true,
+  "owner_public_execution_authority": "FACTORY_OPERATION_CENTER_v33+issue_344_comment_5083865974",
+  "package_lock_path": "11_tools/render_factory/remotion/package-lock.json",
+  "private_repository_archive_artifact_allowed": false,
+  "profile_id": "M1_L01_S01_RU_GOLD_V2_PUBLIC_MEDIA_V1",
+  "public_artifact_upload_allowed": true,
+  "public_workflow_execution_allowed": true,
+  "raw_provider_payloads_in_artifacts_allowed": false,
+  "reference_cell": "M1_L01_S01_RU",
+  "remotion_index_path": "11_tools/render_factory/remotion/src/index.tsx",
+  "required_adapter_qc_checks": [
+    "blank_frame_pass",
+    "unexpected_frozen_frame_pass",
+    "duplicate_frame_pass",
+    "caption_collision_pass",
+    "internal_id_leakage_pass",
+    "technical_surface_readability_pass",
+    "audio_caption_identity_pass",
+    "scene_mode_coverage_pass"
+  ],
+  "runtime": {
+    "chromium_install": "npx remotion browser ensure",
+    "node_version": "22.14.0",
+    "npm_version": "10.9.2",
+    "remotion_install": [
+      "npm",
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund"
+    ],
+    "runner_image": "ubuntu-24.04",
+    "system_packages": [
+      "ffmpeg",
+      "fonts-dejavu-core",
+      "fonts-liberation"
+    ]
+  },
+  "schema_version": "gold-s01-public-media-profile-v1",
+  "secrets_in_artifacts_allowed": false,
+  "writeback_targets": {
+    "issue_numbers": [
+      350,
+      346,
+      348,
+      344
+    ],
+    "repository": "TheGor-365/ai-course-production-system"
+  }
+}
