@@ -16,6 +16,8 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: gold-s01-public-pilot-pr-v7
@@ -43,6 +45,30 @@ jobs:
         with:
           persist-credentials: false
           show-progress: false
+
+      - name: Register exact repaired pilot run start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Gold S01 repaired pilot run started
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}
+          RUNNER_HEAD=${GITHUB_SHA}
+          EVENT=${GITHUB_EVENT_NAME}
+          PRIVATE_SHA=${PRIVATE_SHA}
+          REQUEST_BLOB=${REQUEST_BLOB}
+          REPAIRED_PILOT_RENDERED=false
+          FULL_15_MINUTE_RENDER_STARTED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
 
       - name: Validate runner contour
         run: |
@@ -178,3 +204,35 @@ jobs:
           echo "PUBLIC_ARTIFACT_DOWNLOAD_HASH_VERIFIED=true"
           echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
           echo "NO_FAKE_GREEN=true"
+
+      - name: Register exact repaired pilot terminal status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          PREFLIGHT_STATUS: ${{ steps.preflight.outputs.preflight_status }}
+          RENDER_OUTCOME: ${{ steps.render.outcome }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          MP4_SHA256: ${{ steps.render.outputs.mp4_sha256 }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Gold S01 repaired pilot terminal status
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}
+          RUNNER_HEAD=${GITHUB_SHA}
+          JOB_STATUS=${JOB_STATUS}
+          PREFLIGHT_STATUS=${PREFLIGHT_STATUS:-unavailable}
+          RENDER_OUTCOME=${RENDER_OUTCOME:-unavailable}
+          PILOT_ARTIFACT_ID=${ARTIFACT_ID:-unavailable}
+          PILOT_MP4_SHA256=${MP4_SHA256:-unavailable}
+          REPAIRED_PILOT_RENDERED=${RENDER_OUTCOME}
+          FULL_15_MINUTE_RENDER_STARTED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
