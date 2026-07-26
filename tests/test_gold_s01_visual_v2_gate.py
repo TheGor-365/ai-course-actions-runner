@@ -11,9 +11,11 @@ from gold_s01_visual_v2_gate import (
     EXPECTED_NO_RENDER,
     EXPECTED_PACKAGE,
     EXPECTED_REQUEST,
+    EXPECTED_REQUEST_STATUS,
     EXPECTED_RUNTIME_HEAD,
     EXPECTED_SHA,
     EXPECTED_TESTS,
+    EXPECTED_TIMING_BOUND,
     GateError,
     last_json,
     require,
@@ -34,9 +36,9 @@ class GoldS01VisualV2GateTests(unittest.TestCase):
             "no_render_manifest_sha256": EXPECTED_NO_RENDER,
             "visual_input_fingerprint": EXPECTED_FINGERPRINT,
             "package_manifest_sha256": EXPECTED_PACKAGE,
-            "private_render_request_status": "READY_BLOCKED_ONLY_BY_ACCEPTED_TIMING",
-            "timing_bound": False,
-            "caption_binding_complete": False,
+            "private_render_request_status": EXPECTED_REQUEST_STATUS,
+            "timing_bound": EXPECTED_TIMING_BOUND,
+            "caption_binding_complete": True,
             "package_rebuild_stable": True,
             "final_render_authorized": False,
             "no_fake_green": True,
@@ -46,6 +48,8 @@ class GoldS01VisualV2GateTests(unittest.TestCase):
         self.assertEqual(40, len(EXPECTED_SHA))
         self.assertEqual(40, len(EXPECTED_RUNTIME_HEAD))
         self.assertEqual(42, EXPECTED_TESTS)
+        self.assertTrue(EXPECTED_TIMING_BOUND)
+        self.assertEqual("READY_NON_PROVISIONAL_VISUAL_INPUTS", EXPECTED_REQUEST_STATUS)
         for value in (EXPECTED_NO_RENDER, EXPECTED_FINGERPRINT, EXPECTED_PACKAGE, EXPECTED_REQUEST):
             self.assertEqual(64, len(value))
 
@@ -57,6 +61,13 @@ class GoldS01VisualV2GateTests(unittest.TestCase):
         expected = self.good()
         observed = dict(expected)
         observed["no_render_manifest_sha256"] = "0" * 64
+        with self.assertRaises(GateError):
+            require(observed, expected, "NO_RENDER")
+
+    def test_timing_regression_fails(self):
+        expected = self.good()
+        observed = dict(expected)
+        observed["timing_bound"] = False
         with self.assertRaises(GateError):
             require(observed, expected, "NO_RENDER")
 
