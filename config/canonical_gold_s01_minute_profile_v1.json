@@ -7,13 +7,13 @@
   "source": {
     "repository": "TheGor-365/ai-course-source-library",
     "branch": "worker/m1-l01-s01-canonical-executable-gold-psu-v2",
-    "sha": "e3a1e7dcaa8e8ef64eb0152e02e53df32e084ecf",
+    "sha": "87ad805b6a7f2966058e716faa8c9fcc75ff16f8",
     "canonical_psu_root": "Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY"
   },
   "production": {
     "repository": "TheGor-365/ai-course-production-system",
     "branch": "repair/m1-l01-s01-canonical-psu-compiler-v1",
-    "sha": "74b015b78c60110361f71a7cff5a50794bee0f21",
+    "sha": "93c82d6f799e88c3f03fbe414ac32deecafee420",
     "request_path": "05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_CANONICAL_MINUTE_RENDER_v1.json",
     "compiler_path": "11_tools/render_factory/gold_s01_visual_v2/canonical_psu_compiler_v1.py",
     "adapter_path": "11_tools/render_factory/gold_s01_visual_v2/canonical_minute_adapter_v1.py",
