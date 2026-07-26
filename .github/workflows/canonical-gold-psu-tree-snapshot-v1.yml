@@ -25,6 +25,7 @@ jobs:
       SOURCE_DIR: ${{ github.workspace }}/source
       OUT: ${{ github.workspace }}/snapshot
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      SNAPSHOT_MODE: SANITIZED_PATH_BLOB_SHA256_ONLY
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +42,7 @@ jobs:
           git -C "$SOURCE_DIR" fetch -q --depth=1 origin "$SOURCE_SHA"
           git -C "$SOURCE_DIR" checkout -q --detach "$SOURCE_SHA"
           git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
 
       - name: Build sanitized exact tree snapshot
         id: snapshot
@@ -73,6 +75,7 @@ jobs:
           RUN_ID=${GITHUB_RUN_ID}
           ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
           SOURCE_SHA=${SOURCE_SHA}
+          SNAPSHOT_MODE=${SNAPSHOT_MODE}
           PACKAGE_FILE_COUNT=${{ steps.snapshot.outputs.package_file_count }}
           INVENTORY_SHA256=${{ steps.snapshot.outputs.inventory_sha256 }}
           PRIVATE_CONTENT_INCLUDED=false
