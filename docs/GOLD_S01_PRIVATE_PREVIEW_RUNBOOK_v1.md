@@ -12,32 +12,32 @@ NETWORK_PROVIDER_CALLS_DEFAULT=false
 NO_FAKE_GREEN=true
 ```
 
-## Current execution boundary
+## Authority boundary
 
-Public CI may validate contracts, but private rendering is refused whenever `GITHUB_ACTIONS=true`. Final mutation requires exact runner, control and production SHAs; an externally supplied exact request blob; the fixed production adapter at `11_tools/render_factory/gold_s01_private_execution_v1.py`; a non-provisional Gold v2 no-render manifest with 26 ShotIR and 26 SceneIR records; accepted timing with `unresolved_rows=0`; final RU captions; exact A3483 identity; the visual input fingerprint; runtime/browser/font locks; and explicit execution authorization.
+The final request is accepted only when all of these are exact and non-provisional: runner SHA; externally supplied control head and request Git blob; visual successor SHA; PR #15 exact-gate PASS receipt for PR #349; no-render manifest Git blob, SHA-256 and visual fingerprint; 26 ShotIR and 26 SceneIR; AcceptedTimingContract with `unresolved_rows=0`; final RU captions; A3483 identity; sanitized host-lock receipt; primary/replica read-write-read-delete receipt; explicit execution authorization.
 
-Any missing, provisional or mismatched input stops before render mutation.
+Any missing, stale, failed or provisional authority stops before media mutation. Public workflows cannot execute the private contour.
 
-## Host bootstrap
+## Locked-host readiness
 
-`host-probe` is read-only unless `--authorize-store-probe` is supplied. The optional probe writes random non-media bytes to the primary and replica probe namespaces, reads them, and deletes them. It never installs dependencies.
+`host-readiness` performs no dependency installation and no media render. It records exact identities for Python, Node, npm, Chromium-compatible browser, ffmpeg and ffprobe; verifies the committed package lock and Remotion 4.0.489 closure; resolves only the Gold v2 font aliases `sans-serif` and `monospace` and hashes their actual files; verifies private-root permissions and free space; then performs bounded non-media read-write-read-delete probes in distinct primary and replica namespaces.
 
-The generated install plan keeps `npm ci` unauthorized until exact Node/npm/browser/font locks and a separate install authorization are published. Infrastructure retry cannot alter content inputs.
+The generated receipts contain hashes, versions, sizes and status only. They contain no absolute private paths, media, tokens or secrets.
 
-## State machine
+## Atomic request rebind
+
+`rebind-request` consumes four sanitized authorities: accepted audio handoff, visual exact-gate PASS handoff, host-lock receipt and store-probe receipt. It rejects a failed visual gate, non-zero unresolved rows, stale heads, malformed hashes, missing locks, failed store proof or absent authorization. It replaces only a provisional request; repeating the identical rebind returns `UNCHANGED`; a different already-authorized request is never overwritten.
+
+The committed request uses external exact control binding. Execution verifies that the request path at the supplied control head has the supplied Git blob and that the request base is an ancestor, avoiding a self-referential commit SHA.
+
+## State machine and artifact safety
 
 The executor records 15 ordered stations. A GREEN station with the same input fingerprint is skipped. Failure evidence is append-only. Retry is capped by the profile. An injected retryable failure exits `75`; resume requires the private token and does not replay completed stations.
 
-Stations 03–09 call only the fixed production adapter with fixed flags. A request cannot supply a command or script path.
+Stations 03–09 call only the fixed production adapter. The request cannot provide a command or script path. Before registration, outputs must exist and pass SHA-256, size and ffprobe checks. Primary and replica writes are content-addressed; mismatched existing outputs are never overwritten. Restore is performed into clean scratch, byte and codec identity is verified, and scratch is removed.
 
-## Output safety
-
-Expected outputs are a clean H.264 1920×1080/30 visual master with no audio stream and an H.264/AAC 1920×1080/30 RU preview with stereo 48 kHz audio.
-
-The executor validates file existence, SHA-256, size and ffprobe profile before registration. It writes content-addressed primary and replica copies, performs clean restore with byte and codec verification, removes restore scratch, and emits sanitized receipts. Existing mismatched content-addressed outputs are never overwritten.
-
-Git may receive only hashes, sizes, codec probes, opaque pointer classes and receipt hashes. Media bytes, capability tokens, absolute private paths, caches and secrets stay outside Git.
+Git may receive only sanitized hashes, sizes, codec probes, opaque pointer classes and receipt hashes. Media bytes, capability tokens, raw private paths, caches and secrets remain outside Git.
 
 ## Owner review
 
-`owner_review_gold_s01_v1.py` verifies exact runner/control/production heads, the externally supplied request blob, receipt-chain hashes and local preview hash. It opens a local player only with `--open`. It accepts only `ACCEPT`, `REPAIR_REQUIRED` or `REJECT`, writes a local-only decision receipt, performs no GitHub write and does not invent owner acceptance.
+`owner_review_gold_s01_v1.py` verifies exact heads, request blob and receipt chain, and opens a local player only with `--open`. It accepts only `ACCEPT`, `REPAIR_REQUIRED` or `REJECT`; it never writes owner acceptance automatically.
