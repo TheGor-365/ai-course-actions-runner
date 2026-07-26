@@ -12,14 +12,16 @@ from typing import Any, Mapping, Sequence
 
 EXPECTED_REPO = "TheGor-365/ai-course-production-system"
 EXPECTED_BRANCH = "repair/gold-s01-visual-runtime-v2"
-EXPECTED_SHA = "a4943794f19af0c761be56fbcc8d3906add01b17"
+EXPECTED_SHA = "a98322db77c48141a4de798abd15cafee3a2f807"
 EXPECTED_PR = 349
 EXPECTED_RUNTIME_HEAD = "ae8dafcc3e5634f07d51b9b0dea07410bd867702"
 EXPECTED_TESTS = 42
-EXPECTED_NO_RENDER = "9d8a7cee6a53b28721c48af520220176afb8ad3995f1ee9184072aeb0a99b73a"
-EXPECTED_FINGERPRINT = "847c4971b5660501e1d10e884c47f129c1ea73a7dcd854613bcb14a5ca299018"
-EXPECTED_PACKAGE = "1d7612e00dd6316d8353403fa3da396e2f0e67986ca8d5cf349f3aff78740f7e"
-EXPECTED_REQUEST = "51f0e7f1d3c5cb9f4ca5c0ac9a43df2fbfb88dd763f503f8fc661e1df5ca89b4"
+EXPECTED_NO_RENDER = "636f37d628ac8c56d9c8241a928ca395e95c65060da257c082dcc632a595b920"
+EXPECTED_FINGERPRINT = "7e8ca777786698b5d52bb951594aac069b1977482be64a7229a5c7ba246b5e6a"
+EXPECTED_PACKAGE = "dbb860fa0c3aebbd43879a5ffb80814d4adc92614eac63af394df11033192abd"
+EXPECTED_REQUEST = "631efacdd23d9ca7fa2b8a07ef3e5a8292d176c7949b35427e7f4c4f4af7d720"
+EXPECTED_REQUEST_STATUS = "READY_NON_PROVISIONAL_VISUAL_INPUTS"
+EXPECTED_TIMING_BOUND = True
 
 
 class GateError(ValueError):
@@ -99,9 +101,9 @@ def execute(private_dir: Path, repo: str, branch: str, sha: str) -> dict[str, An
         "no_render_manifest_sha256": EXPECTED_NO_RENDER,
         "visual_input_fingerprint": EXPECTED_FINGERPRINT,
         "package_manifest_sha256": EXPECTED_PACKAGE,
-        "private_render_request_status": "READY_BLOCKED_ONLY_BY_ACCEPTED_TIMING",
-        "timing_bound": False,
-        "caption_binding_complete": False,
+        "private_render_request_status": EXPECTED_REQUEST_STATUS,
+        "timing_bound": EXPECTED_TIMING_BOUND,
+        "caption_binding_complete": True,
         "package_rebuild_stable": True,
         "final_render_authorized": False,
         "no_fake_green": True,
@@ -119,8 +121,9 @@ def execute(private_dir: Path, repo: str, branch: str, sha: str) -> dict[str, An
         "visual_input_fingerprint": EXPECTED_FINGERPRINT,
         "package_manifest_sha256": EXPECTED_PACKAGE,
         "private_render_request_sha256": EXPECTED_REQUEST,
-        "private_render_request_status": "READY_BLOCKED_ONLY_BY_ACCEPTED_TIMING",
-        "timing_bound": False,
+        "private_render_request_status": EXPECTED_REQUEST_STATUS,
+        "timing_bound": EXPECTED_TIMING_BOUND,
+        "caption_binding_complete": True,
         "committed_package_byte_identical": True,
         "package_rebuild_stable": True,
         "stale_embedded_hash_rejected": True,
@@ -159,11 +162,13 @@ def execute(private_dir: Path, repo: str, branch: str, sha: str) -> dict[str, An
         "visual_input_fingerprint": EXPECTED_FINGERPRINT,
         "package_manifest_sha256": EXPECTED_PACKAGE,
         "private_render_request_sha256": EXPECTED_REQUEST,
+        "private_render_request_status": EXPECTED_REQUEST_STATUS,
         "typescript_typecheck": "PASS",
         "committed_package": "PASS_BYTE_IDENTICAL",
         "clean_rebuilds_byte_identical": True,
         "stale_embedded_hash_rejected": True,
-        "timing_bound": False,
+        "timing_bound": EXPECTED_TIMING_BOUND,
+        "caption_binding_complete": True,
         "final_render_authorized": False,
         "media_rendered": False,
         "human_final_preview_accepted": False,
