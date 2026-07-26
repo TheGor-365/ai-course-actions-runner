@@ -24,10 +24,10 @@ jobs:
       PROFILE: config/gold_s01_public_media_profile_v1.json
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-public-render-candidate-v1
-      PRIVATE_SHA: 7e6d2e880a135b9c1ad08ddb96096debe2bb348a
+      PRIVATE_SHA: 517198a088644ba772f84a26cc04ef8a984846b8
       REQUEST_PATH: 05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_v1.json
-      REQUEST_BLOB: 7b4637931ce15c79fb498e050ef2e529009dcb96
-      REQUEST_DECLARED_SHA256: 5fbc138f016d79188deb65a815d383c5386761a3718d4d0db7c4c6a14e054c6f
+      REQUEST_BLOB: 11cfc950ef82323652fd2481f1b8fdd57d8b0141
+      REQUEST_DECLARED_SHA256: 2191390aa7582c318ef14288e8053522b5de7b5209cdae75f884f43d1871b94f
       REQUEST_ID: M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_V1
       PRIVATE_DIR: ${{ github.workspace }}/private-production
       OUT: ${{ github.workspace }}/pilot-output
@@ -64,7 +64,7 @@ jobs:
           git -C "$PRIVATE_DIR" checkout -q --detach "$PRIVATE_SHA"
           git -C "$PRIVATE_DIR" remote set-url origin "https://github.com/${PRIVATE_REPO}.git"
           test "$(git -C "$PRIVATE_DIR" rev-parse HEAD)" = "$PRIVATE_SHA"
-          git -C "$PRIVATE_DIR" cat-file -e "36fcfcc2dcb2e7251869f8be46f414a16586838a^{commit}"
+          git -C "$PRIVATE_DIR" cat-file -e "545de2f049ed6460dbda17ec0165f3d1d2f60fd6^{commit}"
 
       - name: Bind exact request
         id: binding
