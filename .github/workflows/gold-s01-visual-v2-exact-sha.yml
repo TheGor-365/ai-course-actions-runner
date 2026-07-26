@@ -1,0 +1,139 @@
+name: Gold S01 Production Exact SHA
+on:
+  push:
+    branches:
+      - "repair/gold-s01-visual-v2-gate"
+    paths:
+      - ".github/workflows/gold-s01-visual-v2-exact-sha.yml"
+      - "scripts/gold_s01_visual_v2_gate.py"
+      - "tests/test_gold_s01_visual_v2_gate.py"
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+jobs:
+  exact-production-sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: repair/gold-s01-production-composition-pilot-v1
+      PRIVATE_SHA: 36fcfcc2dcb2e7251869f8be46f414a16586838a
+      PRIVATE_PR: 354
+      RUNNER_PR: 15
+      STATUS_CONTEXT: public-runner/gold-s01/production-no-render
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate policy tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/gold_s01_visual_v2_gate.py tests/test_gold_s01_visual_v2_gate.py
+          python3 -m unittest tests/test_gold_s01_visual_v2_gate.py
+      - name: Fixed target guard
+        run: |
+          set -euo pipefail
+          test -n "${PRIVATE_REPO_PAT:-}"
+          test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
+          test "$PRIVATE_BRANCH" = "repair/gold-s01-production-composition-pilot-v1"
+          test "$PRIVATE_SHA" = "36fcfcc2dcb2e7251869f8be46f414a16586838a"
+          test "$PRIVATE_PR" = "354"
+          test "$RUNNER_PR" = "15"
+      - name: Write pending private status
+        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 production no-render gate started" "$RUN_URL"
+      - name: Checkout exact private production head
+        id: checkout
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/private-production"
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$TARGET" >/dev/null 2>&1
+          git -C "$TARGET" fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          test "$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")" = "$PRIVATE_SHA"
+          git -C "$TARGET" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          test "$(git -C "$TARGET" rev-parse HEAD)" = "$PRIVATE_SHA"
+          echo "private_dir=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Run fixed exact production gate
+        id: gate
+        continue-on-error: true
+        run: |
+          OUTPUT="$RUNNER_TEMP/gold-s01-production-gate.txt"
+          set +e
+          python3 scripts/gold_s01_visual_v2_gate.py \
+            --private-dir "${{ steps.checkout.outputs.private_dir }}" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" > "$OUTPUT" 2>&1
+          RC=$?
+          set -e
+          cat "$OUTPUT"
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          for key in result error_code diagnostic_hash private_sha private_pr visual_runtime_head legacy_test_count production_test_count scene_ir_count scene_coverage no_render_manifest_sha256 base_visual_input_fingerprint production_composition_manifest_sha256 production_input_fingerprint pilot_composition_id pilot_duration_in_frames full_composition_id full_duration_in_frames fixed_production_adapter_present visual_execution_authorized final_render_authorized typescript_typecheck composition_discovery media_rendered human_final_preview_accepted public_media_artifacts_created no_fake_green; do
+            value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
+            echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
+          done
+          exit 0
+      - name: Build sanitized receipt
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          RECEIPT="$RUNNER_TEMP/receipt.md"
+          {
+            echo "## Gold S01 production composition exact gate"
+            echo
+            echo '```text'
+            echo "RUNNER_SHA=${{ github.sha }}"
+            echo "PUBLIC_RUN_ID=${{ github.run_id }}"
+            echo "PRIVATE_SHA=$PRIVATE_SHA"
+            echo "RESULT=${{ steps.gate.outputs.result }}"
+            echo "EXIT_CODE=${{ steps.gate.outputs.exit_code }}"
+            echo "ERROR_CODE=${{ steps.gate.outputs.error_code }}"
+            echo "DIAGNOSTIC_HASH=${{ steps.gate.outputs.diagnostic_hash }}"
+            echo "LEGACY_TEST_COUNT=${{ steps.gate.outputs.legacy_test_count }}"
+            echo "PRODUCTION_TEST_COUNT=${{ steps.gate.outputs.production_test_count }}"
+            echo "SCENE_COVERAGE=${{ steps.gate.outputs.scene_coverage }}"
+            echo "NO_RENDER_MANIFEST_SHA256=${{ steps.gate.outputs.no_render_manifest_sha256 }}"
+            echo "BASE_VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.base_visual_input_fingerprint }}"
+            echo "PRODUCTION_COMPOSITION_MANIFEST_SHA256=${{ steps.gate.outputs.production_composition_manifest_sha256 }}"
+            echo "PRODUCTION_INPUT_FINGERPRINT=${{ steps.gate.outputs.production_input_fingerprint }}"
+            echo "PILOT_COMPOSITION_ID=${{ steps.gate.outputs.pilot_composition_id }}"
+            echo "PILOT_DURATION_IN_FRAMES=${{ steps.gate.outputs.pilot_duration_in_frames }}"
+            echo "FULL_COMPOSITION_ID=${{ steps.gate.outputs.full_composition_id }}"
+            echo "FULL_DURATION_IN_FRAMES=${{ steps.gate.outputs.full_duration_in_frames }}"
+            echo "FIXED_PRODUCTION_ADAPTER_PRESENT=${{ steps.gate.outputs.fixed_production_adapter_present }}"
+            echo "VISUAL_EXECUTION_AUTHORIZED=${{ steps.gate.outputs.visual_execution_authorized }}"
+            echo "FINAL_RENDER_AUTHORIZED=${{ steps.gate.outputs.final_render_authorized }}"
+            echo "TYPESCRIPT_TYPECHECK=${{ steps.gate.outputs.typescript_typecheck }}"
+            echo "COMPOSITION_DISCOVERY=${{ steps.gate.outputs.composition_discovery }}"
+            echo "MEDIA_RENDERED=false"
+            echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+            echo "PUBLIC_MEDIA_ARTIFACTS_CREATED=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+          } > "$RECEIPT"
+          cat "$RECEIPT"
+      - name: Write receipt to production PR
+        if: ${{ always() }}
+        run: bash scripts/write_private_pr_comment.sh "$PRIVATE_REPO" "$PRIVATE_PR" "$RUNNER_TEMP/receipt.md"
+      - name: Refresh runner PR body
+        if: ${{ always() }}
+        run: gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/receipt.md"
+      - name: Write final private status
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
+            state=success
+            description="Gold S01 production no-render gate passed"
+          else
+            state=failure
+            description="Gold S01 production no-render gate failed"
+          fi
+          bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$state" "$description" "$RUN_URL"
+      - name: Final assertion
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          test "${{ steps.gate.outputs.result }}" = "PASS"
+          test "${{ steps.gate.outputs.exit_code }}" = "0"

@@ -1,0 +1,86 @@
+name: Gold S01 Visual v2 Emit Pending Document
+on:
+  push:
+    branches:
+      - "repair/gold-s01-visual-v2-gate"
+    paths:
+      - ".github/workflows/gold-s01-visual-v2-emit-package.yml"
+      - "scripts/gold_s01_visual_v2_emit_pending_package.py"
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  emit-document:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
+      PRIVATE_SHA: ae8dafcc3e5634f07d51b9b0dea07410bd867702
+      RUNNER_PR: 15
+      EMIT_FILE: timing_binding_v1.json
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fixed target guard
+        run: |
+          test -n "${PRIVATE_REPO_PAT:-}"
+          test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
+          test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
+          test "$PRIVATE_SHA" = "ae8dafcc3e5634f07d51b9b0dea07410bd867702"
+          test "$RUNNER_PR" = "15"
+      - name: Checkout exact private code head
+        id: checkout
+        run: |
+          TARGET="$RUNNER_TEMP/private-production"
+          git clone --filter=blob:none --no-checkout "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git" "$TARGET" >/dev/null 2>&1
+          git -C "$TARGET" fetch --depth=1 origin "refs/heads/${PRIVATE_BRANCH}:refs/remotes/origin/${PRIVATE_BRANCH}" >/dev/null 2>&1
+          test "$(git -C "$TARGET" rev-parse "refs/remotes/origin/${PRIVATE_BRANCH}")" = "$PRIVATE_SHA"
+          git -C "$TARGET" checkout --detach "$PRIVATE_SHA" >/dev/null 2>&1
+          echo "private_dir=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Build one canonical pending document
+        id: emit
+        run: |
+          OUTPUT="$RUNNER_TEMP/package-document.txt"
+          python3 scripts/gold_s01_visual_v2_emit_pending_package.py \
+            --private-dir "${{ steps.checkout.outputs.private_dir }}" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" \
+            --emit-file "$EMIT_FILE" > "$OUTPUT"
+          for key in result private_sha test_count typescript_typecheck clean_rebuilds_byte_identical document_name document_size document_b64 runtime_binding_sha256 timing_binding_sha256 no_render_manifest_sha256 visual_input_fingerprint private_render_request_sha256 package_manifest_sha256 timing_bound final_render_authorized; do
+            value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done
+      - name: Publish one sanitized document to runner PR
+        run: |
+          BODY="$RUNNER_TEMP/body.md"
+          {
+            echo "## Pending active-package document"
+            echo
+            echo '```text'
+            echo "PRIVATE_SHA=${{ steps.emit.outputs.private_sha }}"
+            echo "RESULT=${{ steps.emit.outputs.result }}"
+            echo "TEST_COUNT=${{ steps.emit.outputs.test_count }}"
+            echo "TYPESCRIPT_TYPECHECK=${{ steps.emit.outputs.typescript_typecheck }}"
+            echo "CLEAN_REBUILDS_BYTE_IDENTICAL=${{ steps.emit.outputs.clean_rebuilds_byte_identical }}"
+            echo "DOCUMENT_NAME=${{ steps.emit.outputs.document_name }}"
+            echo "DOCUMENT_SIZE=${{ steps.emit.outputs.document_size }}"
+            echo "RUNTIME_BINDING_SHA256=${{ steps.emit.outputs.runtime_binding_sha256 }}"
+            echo "TIMING_BINDING_SHA256=${{ steps.emit.outputs.timing_binding_sha256 }}"
+            echo "NO_RENDER_MANIFEST_SHA256=${{ steps.emit.outputs.no_render_manifest_sha256 }}"
+            echo "VISUAL_INPUT_FINGERPRINT=${{ steps.emit.outputs.visual_input_fingerprint }}"
+            echo "PRIVATE_RENDER_REQUEST_SHA256=${{ steps.emit.outputs.private_render_request_sha256 }}"
+            echo "PACKAGE_MANIFEST_SHA256=${{ steps.emit.outputs.package_manifest_sha256 }}"
+            echo "TIMING_BOUND=${{ steps.emit.outputs.timing_bound }}"
+            echo "FINAL_RENDER_AUTHORIZED=${{ steps.emit.outputs.final_render_authorized }}"
+            echo "MEDIA_RENDERED=false"
+            echo "NO_FAKE_GREEN=true"
+            echo '```'
+            echo
+            echo "DOCUMENT_B64=${{ steps.emit.outputs.document_b64 }}"
+            echo
+            echo "This is a sanitized connector-writeback document, not an exact-gate PASS and not render authorization."
+          } > "$BODY"
+          gh pr edit "$RUNNER_PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"
