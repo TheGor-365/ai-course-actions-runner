@@ -50,7 +50,7 @@ python3 11_tools/test_factory_core_day4.py >/dev/null 2>&1 || fail validator day
 python3 11_tools/test_factory_core_day5.py >/dev/null 2>&1 || fail validator day5_test_suite_failed
 python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1 || fail validator factory_interface_adapter_test_suite_failed
 python3 11_tools/test_factory_core_gold_s01_real.py >/dev/null 2>&1 || fail validator gold_s01_real_test_suite_failed
-python3 11_tools/test_factory_core_gold_s01_authority_v2.py >/dev/null 2>&1 || fail validator gold_s01_authority_test_suite_failed
+python3 11_tools/test_factory_core_gold_s01_authority_v2.py || fail validator gold_s01_authority_test_suite_failed
 
 if find 04_validators/test_fixtures/factory_core \
         05_orchestration/launch_5d/core_contracts \
