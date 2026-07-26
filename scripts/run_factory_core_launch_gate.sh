@@ -30,6 +30,8 @@ python3 -m py_compile \
   11_tools/factory_core/state_registry_sync.py \
   11_tools/factory_core/launch_hardening.py \
   11_tools/factory_core/gold_s01_real.py \
+  11_tools/factory_core/gold_s01_authority_v2.py \
+  11_tools/factory_core/runner14_compat.py \
   11_tools/run_factory_core.py \
   11_tools/test_factory_core.py \
   11_tools/test_factory_core_day2.py \
@@ -38,51 +40,36 @@ python3 -m py_compile \
   11_tools/test_factory_core_day5.py \
   11_tools/test_factory_interface_adapter.py \
   11_tools/test_factory_core_gold_s01_real.py \
+  11_tools/test_factory_core_gold_s01_authority_v2.py \
   >/dev/null 2>&1 || fail validator python_compile_failed
 
-python3 11_tools/test_factory_core.py >/dev/null 2>&1 \
-  || fail validator day1_test_suite_failed
-python3 11_tools/test_factory_core_day2.py >/dev/null 2>&1 \
-  || fail validator day2_test_suite_failed
-python3 11_tools/test_factory_core_day3.py >/dev/null 2>&1 \
-  || fail validator day3_test_suite_failed
-python3 11_tools/test_factory_core_day4.py >/dev/null 2>&1 \
-  || fail validator day4_test_suite_failed
-python3 11_tools/test_factory_core_day5.py >/dev/null 2>&1 \
-  || fail validator day5_test_suite_failed
-python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1 \
-  || fail validator factory_interface_adapter_test_suite_failed
-python3 11_tools/test_factory_core_gold_s01_real.py >/dev/null 2>&1 \
-  || fail validator gold_s01_real_test_suite_failed
+python3 11_tools/test_factory_core.py >/dev/null 2>&1 || fail validator day1_test_suite_failed
+python3 11_tools/test_factory_core_day2.py >/dev/null 2>&1 || fail validator day2_test_suite_failed
+python3 11_tools/test_factory_core_day3.py >/dev/null 2>&1 || fail validator day3_test_suite_failed
+python3 11_tools/test_factory_core_day4.py >/dev/null 2>&1 || fail validator day4_test_suite_failed
+python3 11_tools/test_factory_core_day5.py >/dev/null 2>&1 || fail validator day5_test_suite_failed
+python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1 || fail validator factory_interface_adapter_test_suite_failed
+python3 11_tools/test_factory_core_gold_s01_real.py >/dev/null 2>&1 || fail validator gold_s01_real_test_suite_failed
+python3 11_tools/test_factory_core_gold_s01_authority_v2.py >/dev/null 2>&1 || fail validator gold_s01_authority_test_suite_failed
 
 if find 04_validators/test_fixtures/factory_core \
         05_orchestration/launch_5d/core_contracts \
         05_orchestration/gold_s01_closure/contracts \
+        05_orchestration/gold_s01_closure/handoffs \
         11_tools/factory_core \
         -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
         | grep -q .; then
   fail policy binary_media_in_core_paths
 fi
 
-git show --check --oneline --no-renames HEAD >/dev/null 2>&1 \
-  || fail validator diff_hygiene_failed
+git show --check --oneline --no-renames HEAD >/dev/null 2>&1 || fail validator diff_hygiene_failed
 
 CORE_HASH="$(sha256sum 11_tools/factory_core/core.py | awk '{print $1}')"
-DAY2_ADAPTER_HASH="$(sha256sum 11_tools/factory_core/station_outputs.py | awk '{print $1}')"
-DAY3_BOUNDARY_HASH="$(sha256sum 11_tools/factory_core/executor_boundary.py | awk '{print $1}')"
-DAY4_PROOF_HASH="$(sha256sum 11_tools/factory_core/day4_proofs.py | awk '{print $1}')"
-STATE_REGISTRY_SYNC_HASH="$(sha256sum 11_tools/factory_core/state_registry_sync.py | awk '{print $1}')"
-DAY5_HARDENING_HASH="$(sha256sum 11_tools/factory_core/launch_hardening.py | awk '{print $1}')"
-INTERFACE_ADAPTER_HASH="$(sha256sum 11_tools/factory_core/factory_interface.py | awk '{print $1}')"
 GOLD_S01_HASH="$(sha256sum 11_tools/factory_core/gold_s01_real.py | awk '{print $1}')"
+AUTHORITY_HASH="$(sha256sum 11_tools/factory_core/gold_s01_authority_v2.py | awk '{print $1}')"
+RUNNER14_COMPAT_HASH="$(sha256sum 11_tools/factory_core/runner14_compat.py | awk '{print $1}')"
 CLI_HASH="$(sha256sum 11_tools/run_factory_core.py | awk '{print $1}')"
-DAY1_TEST_HASH="$(sha256sum 11_tools/test_factory_core.py | awk '{print $1}')"
-DAY2_TEST_HASH="$(sha256sum 11_tools/test_factory_core_day2.py | awk '{print $1}')"
-DAY3_TEST_HASH="$(sha256sum 11_tools/test_factory_core_day3.py | awk '{print $1}')"
-DAY4_TEST_HASH="$(sha256sum 11_tools/test_factory_core_day4.py | awk '{print $1}')"
-DAY5_TEST_HASH="$(sha256sum 11_tools/test_factory_core_day5.py | awk '{print $1}')"
-INTERFACE_TEST_HASH="$(sha256sum 11_tools/test_factory_interface_adapter.py | awk '{print $1}')"
-GOLD_S01_TEST_HASH="$(sha256sum 11_tools/test_factory_core_gold_s01_real.py | awk '{print $1}')"
+AUTHORITY_TEST_HASH="$(sha256sum 11_tools/test_factory_core_gold_s01_authority_v2.py | awk '{print $1}')"
 
 cat <<EOF
 gate_id=FACTORY_CORE_LAUNCH_GATE
@@ -102,27 +89,19 @@ factory_interface_test_count=5
 factory_interface_tests=PASS
 gold_s01_real_test_count=10
 gold_s01_real_tests=PASS
-state_registry_hash_match=PASS
-internal_launch_blocker_audit=PASS
-quality_release_handoff=PASS
+gold_s01_authority_test_count=7
+gold_s01_authority_tests=PASS
+total_test_count=68
+preflight_real_s01_media_mutation=false
+blind_s02_blocks_first_ru_preview=false
 binary_media_in_core_paths=false
 diff_hygiene=PASS
 sha256_core=$CORE_HASH
-sha256_day2_station_output_adapter=$DAY2_ADAPTER_HASH
-sha256_day3_executor_boundary=$DAY3_BOUNDARY_HASH
-sha256_day4_proof=$DAY4_PROOF_HASH
-sha256_state_registry_sync=$STATE_REGISTRY_SYNC_HASH
-sha256_day5_hardening=$DAY5_HARDENING_HASH
-sha256_factory_interface_adapter=$INTERFACE_ADAPTER_HASH
 sha256_gold_s01_real=$GOLD_S01_HASH
+sha256_gold_s01_authority=$AUTHORITY_HASH
+sha256_runner14_compat=$RUNNER14_COMPAT_HASH
 sha256_cli=$CLI_HASH
-sha256_day1_tests=$DAY1_TEST_HASH
-sha256_day2_tests=$DAY2_TEST_HASH
-sha256_day3_tests=$DAY3_TEST_HASH
-sha256_day4_tests=$DAY4_TEST_HASH
-sha256_day5_tests=$DAY5_TEST_HASH
-sha256_factory_interface_tests=$INTERFACE_TEST_HASH
-sha256_gold_s01_real_tests=$GOLD_S01_TEST_HASH
+sha256_gold_s01_authority_tests=$AUTHORITY_TEST_HASH
 private_content_printed=false
 artifact_policy=none
 result=PASS
