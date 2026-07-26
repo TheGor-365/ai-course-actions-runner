@@ -1,6 +1,12 @@
 name: Canonical Gold PSU Inventory v1
 
 on:
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/canonical-gold-psu-inventory-v1.yml"
+      - "scripts/canonical_gold_psu_inventory_v1.py"
   push:
     branches:
       - repair/m1-l01-s01-canonical-minute-runner-v1
@@ -14,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: canonical-gold-psu-inventory-v1
+  group: canonical-gold-psu-inventory-v1-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
