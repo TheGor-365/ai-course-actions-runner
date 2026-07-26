@@ -55,8 +55,8 @@ class T(unittest.TestCase):
   z=s.probe('ru_preview');z['streams'][1]['channels']=1;s.err('FFPROBE_AUDIO_PROFILE_MISMATCH',G.validate_ffprobe,z,s.p['expected_outputs']['ru_preview'],'ru_preview')
  def test_host_and_store_receipts(s):
   h=s.host_receipt();G.validate_host_locks(h,s.p,h['receipt_hash']);q=copy.deepcopy(h);q['lock_fingerprint']='0'*64;s.err('RECEIPT_HASH_MISMATCH',G.validate_host_locks,q,s.p)
-  q=copy.deepcopy(h);q['browser'].update(version='snap 2.76.1',filename='snap');q['receipt_hash']=G.canonical_hash(q);s.err('HOST_BROWSER_VERSION_INVALID',G.validate_host_locks,q,s.p)
-  q=copy.deepcopy(h);q['browser'].update(version='Chromium 140.0.0.0',filename='snap');q['receipt_hash']=G.canonical_hash(q);s.err('HOST_BROWSER_BINARY_INVALID',G.validate_host_locks,q,s.p)
+  q=copy.deepcopy(h);q['browser'].update(version='snap 2.76.1',filename='snap');q['receipt_hash']=G.canonical_hash(q,omit={'receipt_hash'});s.err('HOST_BROWSER_VERSION_INVALID',G.validate_host_locks,q,s.p)
+  q=copy.deepcopy(h);q['browser'].update(version='Chromium 140.0.0.0',filename='snap');q['receipt_hash']=G.canonical_hash(q,omit={'receipt_hash'});s.err('HOST_BROWSER_BINARY_INVALID',G.validate_host_locks,q,s.p)
   with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ,{'GITHUB_ACTIONS':'false'},clear=False):
    d=Path(d);r=G.store_probe(s.p,d/'p',d/'r');G.validate_store_probe_receipt(r,s.p,r['receipt_hash']);s.assertEqual(r['probe_status'],'PASS');s.assertFalse(any((d/'p').glob('.gold-s01-probe-*')))
   with mock.patch.dict(os.environ,{'GITHUB_ACTIONS':'true'},clear=False):s.err('PUBLIC_WORKFLOW_PRIVATE_EXECUTION_FORBIDDEN',G.store_probe,s.p,Path('/tmp/a'),Path('/tmp/b'))
