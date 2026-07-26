@@ -1,0 +1,90 @@
+name: Canonical Gold Negative Fixtures v1
+
+on:
+  push:
+    branches:
+      - repair/m1-l01-s01-canonical-minute-runner-v1
+    paths:
+      - ".github/workflows/canonical-gold-negative-fixtures-v1.yml"
+      - "scripts/canonical_gold_negative_fixtures_v1.py"
+      - "ops/canonical-gold-negative-fixtures-trigger-v1.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  reject-all-negative-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_REPO: TheGor-365/ai-course-source-library
+      SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
+      SOURCE_SHA: 28121d06b8ade42b6728a548f73b89633e1ed6d9
+      SOURCE_DIR: ${{ github.workspace }}/source
+      OUTPUT_DIR: ${{ github.workspace }}/negative-fixtures
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Clone exact canonical source
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          git init -q "$SOURCE_DIR"
+          git -C "$SOURCE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/${SOURCE_BRANCH}" | awk '{print $1}')" = "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" fetch -q --depth=1 origin "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" checkout -q --detach "$SOURCE_SHA"
+          git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Execute all stable negative regressions
+        id: negative
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          registry="$SOURCE_DIR/Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2/fixtures/GOLD_PSU_NEGATIVE_FIXTURE_SUITE_v1.json"
+          python3 scripts/canonical_gold_negative_fixtures_v1.py \
+            --registry "$registry" \
+            --output "$OUTPUT_DIR/negative-fixture-receipt.json" | tee "$OUTPUT_DIR/negative-fixture.log"
+          echo "fixture_count=$(python3 -c 'import json;print(json.load(open("'"$OUTPUT_DIR/negative-fixture-receipt.json"'"))["fixture_count"])')" >> "$GITHUB_OUTPUT"
+          echo "reject_count=$(python3 -c 'import json;print(json.load(open("'"$OUTPUT_DIR/negative-fixture-receipt.json"'"))["rejected_count"])')" >> "$GITHUB_OUTPUT"
+          echo "receipt_sha256=$(sha256sum "$OUTPUT_DIR/negative-fixture-receipt.json" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: canonical-gold-negative-fixtures-${{ env.SOURCE_SHA }}-${{ github.sha }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish negative fixture receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(cat <<EOF
+          ## Canonical Gold negative fixture proof
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}
+          SOURCE_SHA=${SOURCE_SHA}
+          RUNNER_SHA=${GITHUB_SHA}
+          NEGATIVE_FIXTURE_COUNT=${{ steps.negative.outputs.fixture_count }}
+          NEGATIVE_FIXTURE_REJECT_COUNT=${{ steps.negative.outputs.reject_count }}
+          NEGATIVE_FIXTURE_RECEIPT_SHA256=${{ steps.negative.outputs.receipt_sha256 }}
+          FULL_15_MINUTE_RENDERED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/19/comments" -f body="$body" >/dev/null
