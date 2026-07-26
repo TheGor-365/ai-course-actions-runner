@@ -30,6 +30,7 @@ python3 -m py_compile \
   11_tools/factory_core/state_registry_sync.py \
   11_tools/factory_core/launch_hardening.py \
   11_tools/factory_core/gold_s01_real.py \
+  11_tools/factory_core/gold_s01_authority.py \
   11_tools/factory_core/gold_s01_authority_v2.py \
   11_tools/factory_core/runner14_compat.py \
   11_tools/run_factory_core.py \
@@ -50,7 +51,7 @@ python3 11_tools/test_factory_core_day4.py >/dev/null 2>&1 || fail validator day
 python3 11_tools/test_factory_core_day5.py >/dev/null 2>&1 || fail validator day5_test_suite_failed
 python3 11_tools/test_factory_interface_adapter.py >/dev/null 2>&1 || fail validator factory_interface_adapter_test_suite_failed
 python3 11_tools/test_factory_core_gold_s01_real.py >/dev/null 2>&1 || fail validator gold_s01_real_test_suite_failed
-python3 11_tools/test_factory_core_gold_s01_authority_v2.py || fail validator gold_s01_authority_test_suite_failed
+python3 11_tools/test_factory_core_gold_s01_authority_v2.py >/dev/null 2>&1 || fail validator gold_s01_authority_test_suite_failed
 
 if find 04_validators/test_fixtures/factory_core \
         05_orchestration/launch_5d/core_contracts \
@@ -66,6 +67,7 @@ git show --check --oneline --no-renames HEAD >/dev/null 2>&1 || fail validator d
 
 CORE_HASH="$(sha256sum 11_tools/factory_core/core.py | awk '{print $1}')"
 GOLD_S01_HASH="$(sha256sum 11_tools/factory_core/gold_s01_real.py | awk '{print $1}')"
+AUTHORITY_FACADE_HASH="$(sha256sum 11_tools/factory_core/gold_s01_authority.py | awk '{print $1}')"
 AUTHORITY_HASH="$(sha256sum 11_tools/factory_core/gold_s01_authority_v2.py | awk '{print $1}')"
 RUNNER14_COMPAT_HASH="$(sha256sum 11_tools/factory_core/runner14_compat.py | awk '{print $1}')"
 CLI_HASH="$(sha256sum 11_tools/run_factory_core.py | awk '{print $1}')"
@@ -98,6 +100,7 @@ binary_media_in_core_paths=false
 diff_hygiene=PASS
 sha256_core=$CORE_HASH
 sha256_gold_s01_real=$GOLD_S01_HASH
+sha256_gold_s01_authority_facade=$AUTHORITY_FACADE_HASH
 sha256_gold_s01_authority=$AUTHORITY_HASH
 sha256_runner14_compat=$RUNNER14_COMPAT_HASH
 sha256_cli=$CLI_HASH
