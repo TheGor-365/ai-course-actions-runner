@@ -18,7 +18,7 @@ jobs:
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
       PRIVATE_SHA: ae8dafcc3e5634f07d51b9b0dea07410bd867702
       RUNNER_PR: 15
-      EMIT_FILE: runtime_binding_v1.json
+      EMIT_FILE: timing_binding_v1.json
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
       GH_TOKEN: ${{ github.token }}
     steps:
