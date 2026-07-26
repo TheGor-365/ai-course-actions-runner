@@ -18,7 +18,7 @@ jobs:
     env:
       PRIVATE_REPO: TheGor-365/ai-course-production-system
       PRIVATE_BRANCH: repair/gold-s01-visual-runtime-v2
-      PRIVATE_SHA: a4943794f19af0c761be56fbcc8d3906add01b17
+      PRIVATE_SHA: a98322db77c48141a4de798abd15cafee3a2f807
       PRIVATE_PR: 349
       RUNNER_PR: 15
       STATUS_CONTEXT: public-runner/gold-s01/visual-v2-no-render
@@ -36,11 +36,11 @@ jobs:
           test -n "${PRIVATE_REPO_PAT:-}"
           test "$PRIVATE_REPO" = "TheGor-365/ai-course-production-system"
           test "$PRIVATE_BRANCH" = "repair/gold-s01-visual-runtime-v2"
-          test "$PRIVATE_SHA" = "a4943794f19af0c761be56fbcc8d3906add01b17"
+          test "$PRIVATE_SHA" = "a98322db77c48141a4de798abd15cafee3a2f807"
           test "$PRIVATE_PR" = "349"
           test "$RUNNER_PR" = "15"
       - name: Write pending private status
-        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 visual v2 exact package gate started" "$RUN_URL"
+        run: bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" pending "Gold S01 accepted-timing visual gate started" "$RUN_URL"
       - name: Checkout exact private package head
         id: checkout
         run: |
@@ -66,7 +66,7 @@ jobs:
           set -e
           cat "$OUTPUT"
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
-          for key in result error_code diagnostic_hash private_sha visual_runtime_head test_count semantic_units shot_ir_count scene_ir_count assets_materialized active_document_count no_render_manifest_sha256 visual_input_fingerprint package_manifest_sha256 private_render_request_sha256 typescript_typecheck committed_package clean_rebuilds_byte_identical stale_embedded_hash_rejected timing_bound final_render_authorized; do
+          for key in result error_code diagnostic_hash private_sha visual_runtime_head test_count semantic_units shot_ir_count scene_ir_count assets_materialized active_document_count no_render_manifest_sha256 visual_input_fingerprint package_manifest_sha256 private_render_request_sha256 private_render_request_status typescript_typecheck committed_package clean_rebuilds_byte_identical stale_embedded_hash_rejected timing_bound caption_binding_complete final_render_authorized; do
             value="$(awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");print}' "$OUTPUT" | tail -n1)"
             echo "$key=${value:-unavailable}" >> "$GITHUB_OUTPUT"
           done
@@ -76,7 +76,7 @@ jobs:
         run: |
           RECEIPT="$RUNNER_TEMP/receipt.md"
           {
-            echo "## Gold S01 visual v2 exact package gate"
+            echo "## Gold S01 visual v2 accepted-timing exact gate"
             echo
             echo '```text'
             echo "RUNNER_SHA=${{ github.sha }}"
@@ -97,11 +97,13 @@ jobs:
             echo "VISUAL_INPUT_FINGERPRINT=${{ steps.gate.outputs.visual_input_fingerprint }}"
             echo "PACKAGE_MANIFEST_SHA256=${{ steps.gate.outputs.package_manifest_sha256 }}"
             echo "PRIVATE_RENDER_REQUEST_SHA256=${{ steps.gate.outputs.private_render_request_sha256 }}"
+            echo "PRIVATE_RENDER_REQUEST_STATUS=${{ steps.gate.outputs.private_render_request_status }}"
             echo "TYPESCRIPT_TYPECHECK=${{ steps.gate.outputs.typescript_typecheck }}"
             echo "COMMITTED_PACKAGE=${{ steps.gate.outputs.committed_package }}"
             echo "CLEAN_REBUILDS_BYTE_IDENTICAL=${{ steps.gate.outputs.clean_rebuilds_byte_identical }}"
             echo "STALE_EMBEDDED_HASH_REJECTED=${{ steps.gate.outputs.stale_embedded_hash_rejected }}"
             echo "TIMING_BOUND=${{ steps.gate.outputs.timing_bound }}"
+            echo "CAPTION_BINDING_COMPLETE=${{ steps.gate.outputs.caption_binding_complete }}"
             echo "FINAL_RENDER_AUTHORIZED=${{ steps.gate.outputs.final_render_authorized }}"
             echo "MEDIA_RENDERED=false"
             echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
@@ -122,10 +124,10 @@ jobs:
         run: |
           if [[ "${{ steps.gate.outputs.result }}" == "PASS" && "${{ steps.gate.outputs.exit_code }}" == "0" ]]; then
             state=success
-            description="Gold S01 visual v2 exact package gate passed"
+            description="Gold S01 accepted-timing visual gate passed"
           else
             state=failure
-            description="Gold S01 visual v2 exact package gate failed"
+            description="Gold S01 accepted-timing visual gate failed"
           fi
           bash scripts/write_private_commit_status.sh "$PRIVATE_REPO" "$PRIVATE_SHA" "$STATUS_CONTEXT" "$state" "$description" "$RUN_URL"
       - name: Final assertion
