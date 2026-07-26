@@ -1,0 +1,92 @@
+name: Gold S01 Public Pilot Observer v1
+
+on:
+  push:
+    branches:
+      - repair/gold-s01-public-media-runner-v1
+    paths:
+      - ".github/workflows/gold-s01-public-pilot-observer-v1.yml"
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/gold-s01-public-pilot-observer-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_HEAD: eb9f93612e2a71c8e467dc8e5b46cf1f70ab3147
+      TARGET_WORKFLOW: gold-s01-public-pilot-exact-v1.yml
+    steps:
+      - name: Locate exact pilot run
+        id: locate
+        run: |
+          set -euo pipefail
+          run_id=""
+          for attempt in $(seq 1 30); do
+            run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${TARGET_WORKFLOW}/runs?branch=repair%2Fgold-s01-public-media-runner-v1&per_page=20" --jq ".workflow_runs[] | select(.head_sha == \"${TARGET_HEAD}\") | .id" | head -n 1)"
+            if [[ -n "$run_id" ]]; then break; fi
+            sleep 10
+          done
+          test -n "$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          body="## Exact Gold S01 pilot run located
+
+          \`\`\`text
+          RUN_ID=${run_id}
+          RUNNER_HEAD=${TARGET_HEAD}
+          PRIVATE_SHA=7fef4f7fe92c5adf6e494eacfce100b245cca725
+          OBSERVER_RESTARTED_RENDER=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
+
+      - name: Wait for terminal state
+        id: terminal
+        run: |
+          set -euo pipefail
+          run_id="${{ steps.locate.outputs.run_id }}"
+          status=""
+          conclusion=""
+          for attempt in $(seq 1 180); do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq .status)"
+            conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // ""')"
+            if [[ "$status" == "completed" ]]; then break; fi
+            sleep 20
+          done
+          test "$status" = completed
+          jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+          job_id="$(jq -r '.jobs[0].id // "unavailable"' <<<"$jobs")"
+          job_conclusion="$(jq -r '.jobs[0].conclusion // "unavailable"' <<<"$jobs")"
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+          artifact_count="$(jq -r '.total_count' <<<"$artifacts")"
+          artifact_lines="$(jq -r '.artifacts[]? | "ARTIFACT_ID=\(.id) ARTIFACT_NAME=\(.name) SIZE=\(.size_in_bytes) EXPIRED=\(.expired)"' <<<"$artifacts")"
+          body="## Exact Gold S01 pilot terminal state
+
+          \`\`\`text
+          RUN_ID=${run_id}
+          JOB_ID=${job_id}
+          RUN_STATUS=${status}
+          RUN_CONCLUSION=${conclusion}
+          JOB_CONCLUSION=${job_conclusion}
+          ARTIFACT_COUNT=${artifact_count}
+          ${artifact_lines}
+          PILOT_60S_RENDERED=$([[ "$conclusion" == "success" ]] && echo true || echo false)
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+          echo "artifact_count=$artifact_count" >> "$GITHUB_OUTPUT"
+          test "$conclusion" = success

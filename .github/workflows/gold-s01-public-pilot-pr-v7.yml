@@ -1,0 +1,175 @@
+name: Gold S01 Public Pilot PR v7
+
+on:
+  pull_request:
+    branches:
+      - launch/factory-5d
+    paths:
+      - ".github/workflows/gold-s01-public-pilot-pr-v7.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gold-s01-public-pilot-pr-v7
+  cancel-in-progress: false
+
+jobs:
+  exact-pilot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      PROFILE: config/gold_s01_public_media_profile_v1.json
+      PRIVATE_REPO: TheGor-365/ai-course-production-system
+      PRIVATE_BRANCH: repair/gold-s01-public-render-candidate-v1
+      PRIVATE_SHA: 092bcc3e4e2ace538e600d5eec6025f5c1414ed4
+      REQUEST_PATH: 05_orchestration/gold_s01_closure/runner_infrastructure/requests/M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_v1.json
+      REQUEST_BLOB: 58f32211a7958160e340988f209f2160e47cb73e
+      REQUEST_DECLARED_SHA256: 511488934eac117edc9cfa25fca0f051aacaa0b6d3d776fbbfa697fa5bdda798
+      REQUEST_ID: M1_L01_S01_RU_GOLD_V2_PUBLIC_RENDER_V1
+      PRIVATE_DIR: ${{ github.workspace }}/private-production
+      OUT: ${{ github.workspace }}/pilot-output
+      PREFLIGHT: ${{ github.workspace }}/pilot-preflight
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Validate runner contour
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/gold_s01_public_media_v1.py scripts/gold_s01_public_media_v2.py scripts/gold_s01_public_request_binding_v1.py
+          python3 scripts/gold_s01_public_media_v2.py validate-profile --profile "$PROFILE"
+          python3 tests/test_gold_s01_public_media.py -v
+
+      - name: Install hosted system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fontconfig fonts-dejavu-core fonts-liberation
+
+      - name: Clone exact private render candidate
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          mkdir -p "$PRIVATE_DIR"
+          git -C "$PRIVATE_DIR" init -q
+          git -C "$PRIVATE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git"
+          test "$(git -C "$PRIVATE_DIR" ls-remote origin "refs/heads/${PRIVATE_BRANCH}" | awk '{print $1}')" = "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" fetch -q --depth=60 origin "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" checkout -q --detach "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" remote set-url origin "https://github.com/${PRIVATE_REPO}.git"
+          test "$(git -C "$PRIVATE_DIR" rev-parse HEAD)" = "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" cat-file -e "a41050fbb71bc3de70735d4d06d5dccfc465091a^{commit}"
+
+      - name: Bind exact request
+        id: binding
+        run: |
+          set -euo pipefail
+          mkdir -p "$PREFLIGHT"
+          python3 scripts/gold_s01_public_request_binding_v1.py validate \
+            --private-dir "$PRIVATE_DIR" --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "$REQUEST_DECLARED_SHA256" --request-id "$REQUEST_ID" \
+            --output "$PREFLIGHT/request-binding.json" --github-output "$GITHUB_OUTPUT"
+
+      - name: Exact preflight
+        id: preflight
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v2.py preflight \
+            --profile "$PROFILE" --private-dir "$PRIVATE_DIR" \
+            --private-repo "$PRIVATE_REPO" --private-branch "$PRIVATE_BRANCH" --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
+            --render-mode pilot_60s --request-id "$REQUEST_ID" \
+            --output-dir "$PREFLIGHT" --github-output "$GITHUB_OUTPUT"
+
+      - name: Enforce preflight
+        run: |
+          set -euo pipefail
+          test "${{ steps.preflight.outputs.preflight_status }}" = PASS
+          test -z "${{ steps.preflight.outputs.preflight_blockers }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRIVATE_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Install Remotion and Chromium
+        working-directory: ${{ env.PRIVATE_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.2
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx remotion browser ensure
+
+      - name: Render and machine-check exact pilot
+        id: render
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT" "$PREFLIGHT"
+          python3 scripts/gold_s01_public_media_v2.py render \
+            --profile "$PROFILE" --private-dir "$PRIVATE_DIR" \
+            --private-repo "$PRIVATE_REPO" --private-branch "$PRIVATE_BRANCH" --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
+            --render-mode pilot_60s --request-id "$REQUEST_ID" \
+            --output-dir "$OUT" --github-output "$GITHUB_OUTPUT" 2>&1 | tee "$PREFLIGHT/runtime.log"
+
+      - name: Upload failure evidence
+        if: failure() && steps.preflight.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-runtime-failure-${{ env.PRIVATE_SHA }}
+          path: |
+            ${{ env.PREFLIGHT }}/runtime.log
+            ${{ env.OUT }}/adapter_qc.json
+            ${{ env.PREFLIGHT }}/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload exact pilot
+        if: steps.render.outcome == 'success'
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-${{ env.PRIVATE_SHA }}-${{ steps.render.outputs.input_fingerprint }}
+          path: |
+            ${{ env.OUT }}/M1_L01_S01_RU_pilot_60s_v1.mp4
+            ${{ env.OUT }}/ffprobe.json
+            ${{ env.OUT }}/qc.json
+            ${{ env.OUT }}/adapter_qc.json
+            ${{ env.OUT }}/SHA256SUMS.txt
+            ${{ env.OUT }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Re-download exact pilot
+        if: steps.render.outcome == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-${{ env.PRIVATE_SHA }}-${{ steps.render.outputs.input_fingerprint }}
+          path: ${{ github.workspace }}/pilot-download
+
+      - name: Verify downloaded MP4 identity
+        if: steps.render.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v2.py verify-download \
+            --artifact-dir "${{ github.workspace }}/pilot-download" \
+            --artifact-name "gold-s01-pilot-60s-${PRIVATE_SHA}-${{ steps.render.outputs.input_fingerprint }}" \
+            --expected-sha256 "${{ steps.render.outputs.mp4_sha256 }}" \
+            --output "$OUT/public-artifact-download-proof.json"
+          echo "PILOT_60S_RENDERED=true"
+          echo "PILOT_ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}"
+          echo "PILOT_MP4_SHA256=${{ steps.render.outputs.mp4_sha256 }}"
+          echo "PILOT_MACHINE_QC_GREEN=true"
+          echo "PUBLIC_ARTIFACT_DOWNLOAD_HASH_VERIFIED=true"
+          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+          echo "NO_FAKE_GREEN=true"

@@ -1,0 +1,557 @@
+name: Gold S01 Public Media Render
+
+on:
+  push:
+    branches:
+      - repair/gold-s01-public-media-runner-v1
+    paths:
+      - ".github/workflows/gold-s01-public-media-render.yml"
+      - "config/gold_s01_public_media_profile_v1.json"
+      - "scripts/gold_s01_public_media_v1.py"
+      - "scripts/gold_s01_public_request_binding_v1.py"
+      - "tests/test_gold_s01_public_media.py"
+      - "fixtures/gold_s01_public_media/**"
+      - "docs/GOLD_S01_PUBLIC_MEDIA_RUNBOOK_v1.md"
+  workflow_dispatch:
+    inputs:
+      private_repo:
+        description: Exact private production repository
+        required: true
+        type: string
+        default: TheGor-365/ai-course-production-system
+      private_branch:
+        description: Exact private production branch
+        required: true
+        type: string
+        default: repair/gold-s01-visual-runtime-v2
+      private_sha:
+        description: Exact private production SHA
+        required: true
+        type: string
+        default: a98322db77c48141a4de798abd15cafee3a2f807
+      request_path:
+        description: Exact request path
+        required: true
+        type: string
+        default: 03_modules/M1/L01/04_render_migration/gold_s01_visual_v2/private_render_request_v2.json
+      request_blob:
+        description: Exact Git blob SHA
+        required: true
+        type: string
+        default: ad66b4469cb9737d91c7c39c012644a0554d5fd6
+      request_sha256:
+        description: Exact declared request self-hash
+        required: true
+        type: string
+        default: 631efacdd23d9ca7fa2b8a07ef3e5a8292d176c7949b35427e7f4c4f4af7d720
+      render_mode:
+        description: Exact rerun mode
+        required: true
+        type: choice
+        options:
+          - pilot_60s
+          - full_15m
+        default: pilot_60s
+      request_id:
+        description: Stable request ID
+        required: true
+        type: string
+        default: gold-s01-visual-v2-private-render-final
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: gold-s01-public-media-${{ github.ref }}-${{ inputs.request_id || 'gold-s01-visual-v2-private-render-final' }}
+  cancel-in-progress: false
+
+jobs:
+  public-media-render:
+    name: public-media-render
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PROFILE_PATH: config/gold_s01_public_media_profile_v1.json
+      PRIVATE_DIR: ${{ github.workspace }}/private-production
+      PREFLIGHT_DIR: ${{ github.workspace }}/runtime/preflight
+      PILOT_DIR: ${{ github.workspace }}/runtime/pilot
+      FULL_DIR: ${{ github.workspace }}/runtime/full
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+    steps:
+      - name: Checkout fixed public runner
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          persist-credentials: false
+
+      - name: Resolve and validate fixed inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PRIVATE_REPO: ${{ inputs.private_repo }}
+          INPUT_PRIVATE_BRANCH: ${{ inputs.private_branch }}
+          INPUT_PRIVATE_SHA: ${{ inputs.private_sha }}
+          INPUT_REQUEST_PATH: ${{ inputs.request_path }}
+          INPUT_REQUEST_BLOB: ${{ inputs.request_blob }}
+          INPUT_REQUEST_SHA256: ${{ inputs.request_sha256 }}
+          INPUT_RENDER_MODE: ${{ inputs.render_mode }}
+          INPUT_REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          if os.environ["EVENT_NAME"] == "push":
+              values = {
+                  "PRIVATE_REPO": "TheGor-365/ai-course-production-system",
+                  "PRIVATE_BRANCH": "repair/gold-s01-visual-runtime-v2",
+                  "PRIVATE_SHA": "a98322db77c48141a4de798abd15cafee3a2f807",
+                  "REQUEST_PATH": "03_modules/M1/L01/04_render_migration/gold_s01_visual_v2/private_render_request_v2.json",
+                  "REQUEST_BLOB": "ad66b4469cb9737d91c7c39c012644a0554d5fd6",
+                  "REQUEST_SHA256": "631efacdd23d9ca7fa2b8a07ef3e5a8292d176c7949b35427e7f4c4f4af7d720",
+                  "RENDER_MODE": "pilot_60s",
+                  "REQUEST_ID": "gold-s01-visual-v2-private-render-final",
+                  "PRIMARY_PUSH_CHAIN": "true",
+              }
+          else:
+              values = {
+                  "PRIVATE_REPO": os.environ["INPUT_PRIVATE_REPO"],
+                  "PRIVATE_BRANCH": os.environ["INPUT_PRIVATE_BRANCH"],
+                  "PRIVATE_SHA": os.environ["INPUT_PRIVATE_SHA"],
+                  "REQUEST_PATH": os.environ["INPUT_REQUEST_PATH"],
+                  "REQUEST_BLOB": os.environ["INPUT_REQUEST_BLOB"],
+                  "REQUEST_SHA256": os.environ["INPUT_REQUEST_SHA256"],
+                  "RENDER_MODE": os.environ["INPUT_RENDER_MODE"],
+                  "REQUEST_ID": os.environ["INPUT_REQUEST_ID"],
+                  "PRIMARY_PUSH_CHAIN": "false",
+              }
+          checks = {
+              "PRIVATE_REPO": r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
+              "PRIVATE_BRANCH": r"[A-Za-z0-9._/-]+",
+              "PRIVATE_SHA": r"[0-9a-f]{40}",
+              "REQUEST_PATH": r"[A-Za-z0-9._/-]+",
+              "REQUEST_BLOB": r"[0-9a-f]{40}",
+              "REQUEST_SHA256": r"[0-9a-f]{64}",
+              "RENDER_MODE": r"(pilot_60s|full_15m)",
+              "REQUEST_ID": r"[A-Za-z0-9._-]+",
+              "PRIMARY_PUSH_CHAIN": r"(true|false)",
+          }
+          for key, pattern in checks.items():
+              value = values[key]
+              if not re.fullmatch(pattern, value) or ".." in value:
+                  raise SystemExit(f"UNSAFE_FIXED_INPUT={key}")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+              for key, value in values.items():
+                  stream.write(f"{key}={value}\n")
+          PY
+
+      - name: Register public workflow run start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Gold S01 public media workflow started
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}
+          RUNNER_HEAD=${GITHUB_SHA}
+          EVENT=${GITHUB_EVENT_NAME}
+          PRIVATE_SHA=${PRIVATE_SHA}
+          REQUEST_ID=${REQUEST_ID}
+          EXECUTION_LAYER=public_github_hosted_runner
+          PILOT_60S_RENDERED=false
+          FULL_15M_RENDER_STARTED=false
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
+
+      - name: Validate active public profile and tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/gold_s01_public_media_v1.py \
+            scripts/gold_s01_public_request_binding_v1.py \
+            tests/test_gold_s01_public_media.py
+          python3 scripts/gold_s01_public_media_v1.py validate-profile --profile "$PROFILE_PATH"
+          python3 tests/test_gold_s01_public_media.py -v
+
+      - name: Install and prove public media toolchain baseline
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            fontconfig \
+            fonts-dejavu-core \
+            fonts-liberation
+          for command in node npm ffmpeg ffprobe fc-list; do
+            command -v "$command" >/dev/null
+          done
+          node --version
+          npm --version
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
+          test -n "$(fc-list | sed -n '1p')"
+
+      - name: Clone exact private production SHA without content logging
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          rm -rf "$PRIVATE_DIR"
+          mkdir -p "$PRIVATE_DIR"
+          git -C "$PRIVATE_DIR" init -q
+          git -C "$PRIVATE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRIVATE_REPO}.git"
+          remote_head="$(git -C "$PRIVATE_DIR" ls-remote origin "refs/heads/${PRIVATE_BRANCH}" | awk '{print $1}')"
+          test "$remote_head" = "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" fetch -q --depth=1 origin "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" checkout -q --detach "$PRIVATE_SHA"
+          git -C "$PRIVATE_DIR" remote set-url origin "https://github.com/${PRIVATE_REPO}.git"
+          test "$(git -C "$PRIVATE_DIR" rev-parse HEAD)" = "$PRIVATE_SHA"
+          test -z "$(git -C "$PRIVATE_DIR" status --porcelain)"
+
+      - name: Bind exact request blob, self-hash and raw file hash
+        id: binding
+        run: |
+          set -euo pipefail
+          mkdir -p "$PREFLIGHT_DIR"
+          python3 scripts/gold_s01_public_request_binding_v1.py validate \
+            --private-dir "$PRIVATE_DIR" \
+            --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" \
+            --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "$REQUEST_SHA256" \
+            --request-id "$REQUEST_ID" \
+            --output "$PREFLIGHT_DIR/sanitized_request_binding_receipt.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Exact composition and adapter preflight
+        id: preflight
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v1.py preflight \
+            --profile "$PROFILE_PATH" \
+            --private-dir "$PRIVATE_DIR" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" \
+            --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
+            --render-mode "$RENDER_MODE" \
+            --request-id "$REQUEST_ID" \
+            --output-dir "$PREFLIGHT_DIR" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload sanitized blocked preflight evidence
+        if: steps.preflight.outputs.preflight_status != 'PASS'
+        id: upload_preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-public-preflight-${{ env.PRIVATE_SHA }}-${{ steps.preflight.outputs.input_fingerprint }}
+          path: ${{ env.PREFLIGHT_DIR }}/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write blocked preflight receipt to production and runner PR
+        if: steps.preflight.outputs.preflight_status != 'PASS'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_request_binding_v1.py writeback-blocked \
+            --artifact-id "${{ steps.upload_preflight.outputs.artifact-id }}" \
+            --artifact-name "gold-s01-public-preflight-${PRIVATE_SHA}-${{ steps.preflight.outputs.input_fingerprint }}" \
+            --private-sha "$PRIVATE_SHA" \
+            --input-fingerprint "${{ steps.preflight.outputs.input_fingerprint }}" \
+            --blockers "${{ steps.preflight.outputs.preflight_blockers }}"
+
+      - name: Enforce exact composition and adapter gate
+        if: steps.preflight.outputs.preflight_status != 'PASS'
+        env:
+          BLOCKERS: ${{ steps.preflight.outputs.preflight_blockers }}
+        run: |
+          echo "PUBLIC_RUNNER_MEDIA_EXECUTION_READY=true"
+          echo "PRIVATE_RUNNER_BLOCKER_REMOVED=true"
+          echo "PILOT_60S_RENDERED=false"
+          echo "PILOT_ARTIFACT_ID_AVAILABLE=false"
+          echo "PILOT_MACHINE_QC_GREEN=false"
+          echo "FULL_15M_RENDER_STARTED=false"
+          echo "BLOCKERS=${BLOCKERS}"
+          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+          echo "NO_FAKE_GREEN=true"
+          exit 2
+
+      - name: Pin Node and npm
+        if: steps.preflight.outputs.preflight_status == 'PASS'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: ${{ env.PRIVATE_DIR }}/11_tools/render_factory/remotion/package-lock.json
+
+      - name: Install reproducible Remotion and Chromium runtime
+        if: steps.preflight.outputs.preflight_status == 'PASS'
+        working-directory: ${{ env.PRIVATE_DIR }}/11_tools/render_factory/remotion
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.2
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx remotion browser ensure
+          node --version
+          npm --version
+          npx remotion --version
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
+
+      - name: Render exact 60-second pilot and machine QC
+        if: steps.preflight.outputs.preflight_status == 'PASS' && (env.PRIMARY_PUSH_CHAIN == 'true' || env.RENDER_MODE == 'pilot_60s')
+        id: pilot
+        run: |
+          set -euo pipefail
+          mkdir -p "$PILOT_DIR"
+          python3 scripts/gold_s01_public_media_v1.py render \
+            --profile "$PROFILE_PATH" \
+            --private-dir "$PRIVATE_DIR" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" \
+            --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
+            --render-mode pilot_60s \
+            --request-id "$REQUEST_ID" \
+            --output-dir "$PILOT_DIR" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload pilot media artifact
+        if: steps.pilot.outcome == 'success'
+        id: upload_pilot
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-${{ env.PRIVATE_SHA }}-${{ steps.pilot.outputs.input_fingerprint }}
+          path: |
+            ${{ env.PILOT_DIR }}/*.mp4
+            ${{ env.PILOT_DIR }}/*.vtt
+            ${{ env.PILOT_DIR }}/captions.json
+            ${{ env.PILOT_DIR }}/ffprobe.json
+            ${{ env.PILOT_DIR }}/qc.json
+            ${{ env.PILOT_DIR }}/SHA256SUMS.txt
+            ${{ env.PILOT_DIR }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload pilot QC artifact
+        if: steps.pilot.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-qc-${{ env.PRIVATE_SHA }}
+          path: |
+            ${{ env.PILOT_DIR }}/ffprobe.json
+            ${{ env.PILOT_DIR }}/qc.json
+            ${{ env.PILOT_DIR }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload pilot checksum artifact
+        if: steps.pilot.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pilot-sha256-${{ env.PRIVATE_SHA }}
+          path: ${{ env.PILOT_DIR }}/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Re-download pilot artifact
+        if: steps.pilot.outcome == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: gold-s01-pilot-60s-${{ env.PRIVATE_SHA }}-${{ steps.pilot.outputs.input_fingerprint }}
+          path: ${{ github.workspace }}/runtime/downloaded-pilot
+
+      - name: Verify downloaded pilot MP4 hash
+        if: steps.pilot.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v1.py verify-download \
+            --artifact-dir "${{ github.workspace }}/runtime/downloaded-pilot" \
+            --artifact-name "gold-s01-pilot-60s-${PRIVATE_SHA}-${{ steps.pilot.outputs.input_fingerprint }}" \
+            --expected-sha256 "${{ steps.pilot.outputs.mp4_sha256 }}" \
+            --output "$PILOT_DIR/public_artifact_download_proof.json"
+
+      - name: Write pilot receipt to private production control
+        if: steps.pilot.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v1.py writeback \
+            --profile "$PROFILE_PATH" \
+            --artifact-id "${{ steps.upload_pilot.outputs.artifact-id }}" \
+            --artifact-name "gold-s01-pilot-60s-${PRIVATE_SHA}-${{ steps.pilot.outputs.input_fingerprint }}" \
+            --private-sha "$PRIVATE_SHA" \
+            --input-fingerprint "${{ steps.pilot.outputs.input_fingerprint }}" \
+            --mp4-sha256 "${{ steps.pilot.outputs.mp4_sha256 }}" \
+            --size-bytes "${{ steps.pilot.outputs.size_bytes }}" \
+            --ffprobe-hash "${{ steps.pilot.outputs.ffprobe_hash }}" \
+            --qc-hash "${{ steps.pilot.outputs.qc_hash }}" \
+            --render-mode pilot_60s \
+            --download-verified true
+
+      - name: Render full 15-minute package after pilot PASS or exact full rerun
+        if: steps.preflight.outputs.preflight_status == 'PASS' && ((env.PRIMARY_PUSH_CHAIN == 'true' && steps.pilot.outcome == 'success') || (env.PRIMARY_PUSH_CHAIN == 'false' && env.RENDER_MODE == 'full_15m'))
+        id: full
+        run: |
+          set -euo pipefail
+          mkdir -p "$FULL_DIR"
+          python3 scripts/gold_s01_public_media_v1.py render \
+            --profile "$PROFILE_PATH" \
+            --private-dir "$PRIVATE_DIR" \
+            --private-repo "$PRIVATE_REPO" \
+            --private-branch "$PRIVATE_BRANCH" \
+            --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" \
+            --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
+            --render-mode full_15m \
+            --request-id "$REQUEST_ID" \
+            --output-dir "$FULL_DIR" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload full 15-minute artifact
+        if: steps.full.outcome == 'success'
+        id: upload_full
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-full-15m-${{ env.PRIVATE_SHA }}-${{ steps.full.outputs.input_fingerprint }}
+          path: |
+            ${{ env.FULL_DIR }}/M1_L01_S01_RU_full_15m_v1.mp4
+            ${{ env.FULL_DIR }}/*.vtt
+            ${{ env.FULL_DIR }}/captions.json
+            ${{ env.FULL_DIR }}/ffprobe.json
+            ${{ env.FULL_DIR }}/qc.json
+            ${{ env.FULL_DIR }}/SHA256SUMS.txt
+            ${{ env.FULL_DIR }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload clean visual master artifact
+        if: steps.full.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-clean-visual-master-${{ env.PRIVATE_SHA }}
+          path: |
+            ${{ env.FULL_DIR }}/M1_L01_S01_RU_visual_master_clean_v1.mp4
+            ${{ env.FULL_DIR }}/SHA256SUMS.txt
+            ${{ env.FULL_DIR }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload full QC artifact
+        if: steps.full.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-full-qc-${{ env.PRIVATE_SHA }}
+          path: |
+            ${{ env.FULL_DIR }}/ffprobe.json
+            ${{ env.FULL_DIR }}/qc.json
+            ${{ env.FULL_DIR }}/sanitized_execution_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload full checksum artifact
+        if: steps.full.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-full-sha256-${{ env.PRIVATE_SHA }}
+          path: ${{ env.FULL_DIR }}/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Re-download full artifact
+        if: steps.full.outcome == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: gold-s01-full-15m-${{ env.PRIVATE_SHA }}-${{ steps.full.outputs.input_fingerprint }}
+          path: ${{ github.workspace }}/runtime/downloaded-full
+
+      - name: Verify downloaded full MP4 hash
+        if: steps.full.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v1.py verify-download \
+            --artifact-dir "${{ github.workspace }}/runtime/downloaded-full" \
+            --artifact-name "gold-s01-full-15m-${PRIVATE_SHA}-${{ steps.full.outputs.input_fingerprint }}" \
+            --expected-sha256 "${{ steps.full.outputs.mp4_sha256 }}" \
+            --output "$FULL_DIR/public_artifact_download_proof.json"
+
+      - name: Write full receipt to private production control
+        if: steps.full.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_media_v1.py writeback \
+            --profile "$PROFILE_PATH" \
+            --artifact-id "${{ steps.upload_full.outputs.artifact-id }}" \
+            --artifact-name "gold-s01-full-15m-${PRIVATE_SHA}-${{ steps.full.outputs.input_fingerprint }}" \
+            --private-sha "$PRIVATE_SHA" \
+            --input-fingerprint "${{ steps.full.outputs.input_fingerprint }}" \
+            --mp4-sha256 "${{ steps.full.outputs.mp4_sha256 }}" \
+            --size-bytes "${{ steps.full.outputs.size_bytes }}" \
+            --ffprobe-hash "${{ steps.full.outputs.ffprobe_hash }}" \
+            --qc-hash "${{ steps.full.outputs.qc_hash }}" \
+            --render-mode full_15m \
+            --download-verified true
+
+      - name: Final truthful status
+        if: always()
+        run: |
+          echo "PUBLIC_RUNNER_MEDIA_EXECUTION_READY=true"
+          echo "PRIVATE_RUNNER_BLOCKER_REMOVED=true"
+          echo "PILOT_60S_RENDERED=${{ steps.pilot.outcome == 'success' }}"
+          echo "PILOT_ARTIFACT_ID_AVAILABLE=${{ steps.upload_pilot.outputs.artifact-id != '' }}"
+          echo "PILOT_MACHINE_QC_GREEN=${{ steps.pilot.outcome == 'success' }}"
+          echo "FULL_15M_RENDER_STARTED=${{ steps.full.outcome == 'success' }}"
+          echo "FULL_15M_ARTIFACT_ID_AVAILABLE=${{ steps.upload_full.outputs.artifact-id != '' }}"
+          echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
+          echo "NO_FAKE_GREEN=true"
+
+      - name: Register public workflow terminal status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          PREFLIGHT_STATUS: ${{ steps.preflight.outputs.preflight_status }}
+          PREFLIGHT_BLOCKERS: ${{ steps.preflight.outputs.preflight_blockers }}
+          PREFLIGHT_ARTIFACT_ID: ${{ steps.upload_preflight.outputs.artifact-id }}
+          PILOT_OUTCOME: ${{ steps.pilot.outcome }}
+          PILOT_ARTIFACT_ID: ${{ steps.upload_pilot.outputs.artifact-id }}
+          FULL_OUTCOME: ${{ steps.full.outcome }}
+          FULL_ARTIFACT_ID: ${{ steps.upload_full.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Gold S01 public media workflow terminal status
+
+          \`\`\`text
+          RUN_ID=${GITHUB_RUN_ID}
+          RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}
+          RUNNER_HEAD=${GITHUB_SHA}
+          JOB_STATUS=${JOB_STATUS}
+          PREFLIGHT_STATUS=${PREFLIGHT_STATUS:-unavailable}
+          PREFLIGHT_BLOCKERS=${PREFLIGHT_BLOCKERS:-unavailable}
+          PREFLIGHT_ARTIFACT_ID=${PREFLIGHT_ARTIFACT_ID:-unavailable}
+          PILOT_OUTCOME=${PILOT_OUTCOME:-unavailable}
+          PILOT_ARTIFACT_ID=${PILOT_ARTIFACT_ID:-unavailable}
+          FULL_OUTCOME=${FULL_OUTCOME:-unavailable}
+          FULL_ARTIFACT_ID=${FULL_ARTIFACT_ID:-unavailable}
+          HUMAN_FINAL_PREVIEW_ACCEPTED=false
+          NO_FAKE_GREEN=true
+          \`\`\`
+          EOF
+          )"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" --method POST -f body="$body" >/dev/null
