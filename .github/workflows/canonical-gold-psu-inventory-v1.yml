@@ -32,7 +32,7 @@ jobs:
     env:
       SOURCE_REPO: TheGor-365/ai-course-source-library
       SOURCE_BRANCH: worker/m1-l01-s01-canonical-executable-gold-psu-v2
-      SOURCE_SHA: 87ad805b6a7f2966058e716faa8c9fcc75ff16f8
+      SOURCE_SHA: 731280471dc0b59b99b9c3192828ba1a9e567c02
       SOURCE_DIR: ${{ github.workspace }}/source
       OUT: ${{ github.workspace }}/inventory-output
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
