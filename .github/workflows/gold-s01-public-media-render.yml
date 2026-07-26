@@ -8,6 +8,7 @@ on:
       - ".github/workflows/gold-s01-public-media-render.yml"
       - "config/gold_s01_public_media_profile_v1.json"
       - "scripts/gold_s01_public_media_v1.py"
+      - "scripts/gold_s01_public_request_binding_v1.py"
       - "tests/test_gold_s01_public_media.py"
       - "fixtures/gold_s01_public_media/**"
       - "docs/GOLD_S01_PUBLIC_MEDIA_RUNBOOK_v1.md"
@@ -39,7 +40,7 @@ on:
         type: string
         default: ad66b4469cb9737d91c7c39c012644a0554d5fd6
       request_sha256:
-        description: Exact request SHA-256
+        description: Exact declared request self-hash
         required: true
         type: string
         default: 631efacdd23d9ca7fa2b8a07ef3e5a8292d176c7949b35427e7f4c4f4af7d720
@@ -98,7 +99,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os, re
+          import os
+          import re
           from pathlib import Path
 
           if os.environ["EVENT_NAME"] == "push":
@@ -111,6 +113,7 @@ jobs:
                   "REQUEST_SHA256": "631efacdd23d9ca7fa2b8a07ef3e5a8292d176c7949b35427e7f4c4f4af7d720",
                   "RENDER_MODE": "pilot_60s",
                   "REQUEST_ID": "gold-s01-visual-v2-private-render-final",
+                  "PRIMARY_PUSH_CHAIN": "true",
               }
           else:
               values = {
@@ -122,6 +125,7 @@ jobs:
                   "REQUEST_SHA256": os.environ["INPUT_REQUEST_SHA256"],
                   "RENDER_MODE": os.environ["INPUT_RENDER_MODE"],
                   "REQUEST_ID": os.environ["INPUT_REQUEST_ID"],
+                  "PRIMARY_PUSH_CHAIN": "false",
               }
           checks = {
               "PRIVATE_REPO": r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
@@ -132,6 +136,7 @@ jobs:
               "REQUEST_SHA256": r"[0-9a-f]{64}",
               "RENDER_MODE": r"(pilot_60s|full_15m)",
               "REQUEST_ID": r"[A-Za-z0-9._-]+",
+              "PRIMARY_PUSH_CHAIN": r"(true|false)",
           }
           for key, pattern in checks.items():
               value = values[key]
@@ -145,7 +150,10 @@ jobs:
       - name: Validate active public profile and tests
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/gold_s01_public_media_v1.py tests/test_gold_s01_public_media.py
+          python3 -m py_compile \
+            scripts/gold_s01_public_media_v1.py \
+            scripts/gold_s01_public_request_binding_v1.py \
+            tests/test_gold_s01_public_media.py
           python3 scripts/gold_s01_public_media_v1.py validate-profile --profile "$PROFILE_PATH"
           python3 tests/test_gold_s01_public_media.py -v
 
@@ -154,9 +162,9 @@ jobs:
           set -euo pipefail
           node --version
           npm --version
-          ffmpeg -version | head -n 1
-          ffprobe -version | head -n 1
-          fc-list | head -n 5 >/dev/null
+          ffmpeg -version | sed -n '1p'
+          ffprobe -version | sed -n '1p'
+          fc-list | sed -n '1,5p' >/dev/null
 
       - name: Clone exact private production SHA without content logging
         run: |
@@ -174,12 +182,26 @@ jobs:
           test "$(git -C "$PRIVATE_DIR" rev-parse HEAD)" = "$PRIVATE_SHA"
           test -z "$(git -C "$PRIVATE_DIR" status --porcelain)"
 
-      - name: Exact request and composition preflight
+      - name: Bind exact request blob, self-hash and raw file hash
+        id: binding
+        run: |
+          set -euo pipefail
+          mkdir -p "$PREFLIGHT_DIR"
+          python3 scripts/gold_s01_public_request_binding_v1.py validate \
+            --private-dir "$PRIVATE_DIR" \
+            --private-sha "$PRIVATE_SHA" \
+            --request-path "$REQUEST_PATH" \
+            --request-blob "$REQUEST_BLOB" \
+            --request-sha256 "$REQUEST_SHA256" \
+            --request-id "$REQUEST_ID" \
+            --output "$PREFLIGHT_DIR/sanitized_request_binding_receipt.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Exact composition and adapter preflight
         id: preflight
         continue-on-error: true
         run: |
           set -euo pipefail
-          mkdir -p "$PREFLIGHT_DIR"
           python3 scripts/gold_s01_public_media_v1.py preflight \
             --profile "$PROFILE_PATH" \
             --private-dir "$PRIVATE_DIR" \
@@ -188,7 +210,7 @@ jobs:
             --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" \
             --request-blob "$REQUEST_BLOB" \
-            --request-sha256 "$REQUEST_SHA256" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
             --render-mode "$RENDER_MODE" \
             --request-id "$REQUEST_ID" \
             --output-dir "$PREFLIGHT_DIR" \
@@ -196,12 +218,24 @@ jobs:
 
       - name: Upload sanitized blocked preflight evidence
         if: steps.preflight.outputs.preflight_status != 'PASS'
+        id: upload_preflight
         uses: actions/upload-artifact@v4
         with:
           name: gold-s01-public-preflight-${{ env.PRIVATE_SHA }}-${{ steps.preflight.outputs.input_fingerprint }}
-          path: ${{ env.PREFLIGHT_DIR }}/sanitized_preflight_receipt.json
+          path: ${{ env.PREFLIGHT_DIR }}/*.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Write blocked preflight receipt to production and runner PR
+        if: steps.preflight.outputs.preflight_status != 'PASS'
+        run: |
+          set -euo pipefail
+          python3 scripts/gold_s01_public_request_binding_v1.py writeback-blocked \
+            --artifact-id "${{ steps.upload_preflight.outputs.artifact-id }}" \
+            --artifact-name "gold-s01-public-preflight-${PRIVATE_SHA}-${{ steps.preflight.outputs.input_fingerprint }}" \
+            --private-sha "$PRIVATE_SHA" \
+            --input-fingerprint "${{ steps.preflight.outputs.input_fingerprint }}" \
+            --blockers "${{ steps.preflight.outputs.preflight_blockers }}"
 
       - name: Enforce exact composition and adapter gate
         if: steps.preflight.outputs.preflight_status != 'PASS'
@@ -211,6 +245,9 @@ jobs:
           echo "PUBLIC_RUNNER_MEDIA_EXECUTION_READY=true"
           echo "PRIVATE_RUNNER_BLOCKER_REMOVED=true"
           echo "PILOT_60S_RENDERED=false"
+          echo "PILOT_ARTIFACT_ID_AVAILABLE=false"
+          echo "PILOT_MACHINE_QC_GREEN=false"
+          echo "FULL_15M_RENDER_STARTED=false"
           echo "BLOCKERS=${BLOCKERS}"
           echo "HUMAN_FINAL_PREVIEW_ACCEPTED=false"
           echo "NO_FAKE_GREEN=true"
@@ -235,11 +272,11 @@ jobs:
           node --version
           npm --version
           npx remotion --version
-          ffmpeg -version | head -n 1
-          ffprobe -version | head -n 1
+          ffmpeg -version | sed -n '1p'
+          ffprobe -version | sed -n '1p'
 
       - name: Render exact 60-second pilot and machine QC
-        if: steps.preflight.outputs.preflight_status == 'PASS'
+        if: steps.preflight.outputs.preflight_status == 'PASS' && (env.PRIMARY_PUSH_CHAIN == 'true' || env.RENDER_MODE == 'pilot_60s')
         id: pilot
         run: |
           set -euo pipefail
@@ -252,7 +289,7 @@ jobs:
             --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" \
             --request-blob "$REQUEST_BLOB" \
-            --request-sha256 "$REQUEST_SHA256" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
             --render-mode pilot_60s \
             --request-id "$REQUEST_ID" \
             --output-dir "$PILOT_DIR" \
@@ -330,8 +367,8 @@ jobs:
             --render-mode pilot_60s \
             --download-verified true
 
-      - name: Render full 15-minute package after pilot PASS
-        if: steps.pilot.outcome == 'success'
+      - name: Render full 15-minute package after pilot PASS or exact full rerun
+        if: steps.preflight.outputs.preflight_status == 'PASS' && ((env.PRIMARY_PUSH_CHAIN == 'true' && steps.pilot.outcome == 'success') || (env.PRIMARY_PUSH_CHAIN == 'false' && env.RENDER_MODE == 'full_15m'))
         id: full
         run: |
           set -euo pipefail
@@ -344,7 +381,7 @@ jobs:
             --private-sha "$PRIVATE_SHA" \
             --request-path "$REQUEST_PATH" \
             --request-blob "$REQUEST_BLOB" \
-            --request-sha256 "$REQUEST_SHA256" \
+            --request-sha256 "${{ steps.binding.outputs.request_raw_sha256 }}" \
             --render-mode full_15m \
             --request-id "$REQUEST_ID" \
             --output-dir "$FULL_DIR" \
