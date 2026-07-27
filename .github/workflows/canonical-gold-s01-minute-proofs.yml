@@ -160,7 +160,7 @@ jobs:
           echo MEDIA_JOB_REACHABLE=false
 
   runtime-discovery:
-    if: ${{ needs.static-contract.result == 'success' && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'runtime_discovery') || github.event_name == 'push') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'runtime_discovery') || github.event_name == 'push' }}
     needs: static-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 45
