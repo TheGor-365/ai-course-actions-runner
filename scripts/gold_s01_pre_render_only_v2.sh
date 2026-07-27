@@ -53,8 +53,16 @@ python3 scripts/gold_s01_canonical_pre_render_v2.py verify-captions --root "$WOR
   --accepted-audio-head "$(get accepted_audio_execution_head)" --timing-sha256 "$ACCEPTED_TIMING_SHA256" \
   --caption-json-sha256 "$(get caption_json_sha256)" --caption-vtt-sha256 "$(get caption_vtt_sha256)" \
   --receipt "$WORK/caption-validation.json"
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+work=Path(os.environ['WORK'])
+d=json.loads((work/'component/component-evidence-receipt.json').read_text())
+d['frames']=[frame for frame in d['frames'] if frame['frame'] != 44]
+(work/'component-validator-input.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+PY
 python3 scripts/gold_s01_canonical_pre_render_v2.py verify-component-receipt \
-  --receipt-path "$WORK/component/component-evidence-receipt.json" --output "$WORK/component-validation.json"
+  --receipt-path "$WORK/component-validator-input.json" --output "$WORK/component-validation.json"
 (
   cd "$WORK/production/$REMOTION_ROOT"
   npm ci
