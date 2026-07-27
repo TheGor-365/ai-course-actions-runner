@@ -9,59 +9,23 @@ on:
         type: choice
         options: [static_contract, runtime_discovery, component_evidence, caption_packaging, pre_render_only]
         default: static_contract
-      runner_branch:
-        description: Exact runner branch
-        required: true
-        type: string
-      runner_head:
-        description: Exact runner branch head
-        required: true
-        type: string
-      production_branch:
-        description: Exact production runtime branch
-        required: false
-        type: string
-      production_runtime_head:
-        description: Exact production runtime head
-        required: false
-        type: string
-      production_compile_head:
-        description: Immutable compiler input head
-        required: false
-        type: string
-      compiler_artifact_id:
-        description: Exact compiler artifact ID
-        required: false
-        type: string
-      compiler_artifact_sha256:
-        description: Exact compiler artifact archive SHA-256
-        required: false
-        type: string
-      caption_carrier_branch:
-        description: Exact caption carrier branch
-        required: false
-        type: string
-      caption_carrier_head:
-        description: Exact caption carrier head
-        required: false
-        type: string
+      runner_branch: {description: Exact runner branch, required: true, type: string}
+      runner_head: {description: Exact runner branch head, required: true, type: string}
+      production_branch: {description: Exact production runtime branch, required: false, type: string}
+      production_runtime_head: {description: Exact production runtime head, required: false, type: string}
+      production_compile_head: {description: Immutable compiler input head, required: false, type: string}
+      compiler_artifact_id: {description: Exact compiler artifact ID, required: false, type: string}
+      compiler_artifact_sha256: {description: Exact compiler artifact archive SHA-256, required: false, type: string}
+      caption_carrier_branch: {description: Exact caption carrier branch, required: false, type: string}
+      caption_carrier_head: {description: Exact caption carrier head, required: false, type: string}
       accepted_audio_head:
         description: Accepted audio execution head
         required: false
         type: string
         default: 755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4
-      caption_vtt_sha256:
-        description: Exact accepted VTT SHA-256
-        required: false
-        type: string
-      caption_artifact_id:
-        description: Exact caption artifact ID
-        required: false
-        type: string
-      caption_artifact_sha256:
-        description: Exact caption artifact archive SHA-256
-        required: false
-        type: string
+      caption_vtt_sha256: {description: Exact accepted VTT SHA-256, required: false, type: string}
+      caption_artifact_id: {description: Exact caption artifact ID, required: false, type: string}
+      caption_artifact_sha256: {description: Exact caption artifact archive SHA-256, required: false, type: string}
       authority_manifest_path:
         description: Immutable pre-render manifest path
         required: false
@@ -165,10 +129,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (inputs.runner_head || github.sha) }}
-          persist-credentials: false
+      - name: 01_checkout_exact_runner_branch_head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNNER_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (inputs.runner_head || github.sha) }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          git init -q .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth=1 origin "$RUNNER_HEAD"
+          git checkout -q --detach FETCH_HEAD
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
       - name: 02_execute_exact_runtime_discovery
         env:
           PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
@@ -179,11 +152,12 @@ jobs:
           COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id || '8652825560' }}
           COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 || 'ea5476005645c3dbb4cc7e73e002dc1cb2f6d7b64a546104c3b0012b0fef7785' }}
         run: scripts/gold_s01_runtime_discovery_v2.sh
-      - uses: actions/upload-artifact@v4
+      - name: 03_upload_runtime_discovery_evidence
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head || '8344fedf3bb82601e20eaf8eb831bff3ecc80bfa' }}
-          path: ${{ env.WORK }}/runtime-evidence
+          path: work/runtime-evidence
           if-no-files-found: error
           retention-days: 30
 
