@@ -17,10 +17,10 @@ permissions:
 env:
   SOURCE_REPO: TheGor-365/ai-course-source-library
   SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-final-exact-repair-v1
-  SOURCE_HEAD: acb45e07e7dbdda8a9595f7b426b7a9f0667ce4f
+  SOURCE_HEAD: 4cfc9acd1509408f86c8b3a788779173395bbb2f
   PRODUCTION_REPO: TheGor-365/ai-course-production-system
   PRODUCTION_BRANCH: worker/m1-l01-s01-premium-production-finalization-v1
-  PRODUCTION_HEAD: ea9ec8e15361c02f5fe5dd8be3bc21bdf3f34c9a
+  PRODUCTION_HEAD: 8143afd662f020e0e3b79068eca9e7bcd3b5e45c
   PACKAGE_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
   ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
 
@@ -140,7 +140,7 @@ jobs:
           assets=json.loads((root/'resolved_asset_materialization_plan.json').read_text())
           shared=json.loads((root/'resolved_shared_ID_binding.json').read_text())
           assert receipt['PREMIUM_COMPILER_ACTUAL_S01_RUN']=='PASS'
-          assert receipt['exact_source_head']=='acb45e07e7dbdda8a9595f7b426b7a9f0667ce4f'
+          assert receipt['exact_source_head']=='4cfc9acd1509408f86c8b3a788779173395bbb2f'
           assert receipt['shot_ir_count']==26 and shot['record_count']==26
           assert receipt['scene_ir_count']==26 and scene['record_count']==26
           assert receipt['source_visual_event_count']==24 and events['record_count']==24
@@ -166,7 +166,7 @@ jobs:
             'schema_version':'premium_compiler_remote_receipt.v1',
             'result':'PASS',
             'source_head':receipt['exact_source_head'],
-            'production_head':'ea9ec8e15361c02f5fe5dd8be3bc21bdf3f34c9a',
+            'production_head':'8143afd662f020e0e3b79068eca9e7bcd3b5e45c',
             'compiler_receipt_sha256':sums['premium_compiler_receipt.json'],
             'shot_ir_sha256':sums['resolved_premium_shot_ir.json'],
             'scene_ir_sha256':sums['resolved_premium_scene_ir.json'],
