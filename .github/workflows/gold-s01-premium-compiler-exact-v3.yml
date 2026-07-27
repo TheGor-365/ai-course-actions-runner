@@ -1,0 +1,177 @@
+name: Gold S01 Premium Compiler Exact v3
+
+on:
+  push:
+    branches:
+      - worker/m1-l01-s01-runner-pre-render-finalization-v1
+    paths:
+      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPO: TheGor-365/ai-course-source-library
+  SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-final-exact-repair-v1
+  SOURCE_HEAD: acb45e07e7dbdda8a9595f7b426b7a9f0667ce4f
+  PRODUCTION_REPO: TheGor-365/ai-course-production-system
+  PRODUCTION_BRANCH: worker/m1-l01-s01-premium-production-finalization-v1
+  PRODUCTION_HEAD: ea9ec8e15361c02f5fe5dd8be3bc21bdf3f34c9a
+  PACKAGE_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
+  ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
+
+jobs:
+  compile-exact-s01:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: 01_checkout_exact_runner
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: 02_clone_exact_source_and_production
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          clone_exact() {
+            repo="$1" branch="$2" expected="$3" directory="$4"
+            git init -q "$directory"
+            git -C "$directory" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            remote_head=$(git -C "$directory" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')
+            test "$remote_head" = "$expected"
+            git -C "$directory" fetch -q --depth=1 origin "$expected"
+            git -C "$directory" checkout -q --detach "$expected"
+            git -C "$directory" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$directory" rev-parse HEAD)" = "$expected"
+            test -z "$(git -C "$directory" status --porcelain)"
+          }
+          clone_exact "$SOURCE_REPO" "$SOURCE_BRANCH" "$SOURCE_HEAD" source
+          clone_exact "$PRODUCTION_REPO" "$PRODUCTION_BRANCH" "$PRODUCTION_HEAD" production
+
+      - name: 03_verify_compiler_segment_identity_and_syntax
+        run: |
+          set -euo pipefail
+          compiler_root=production/11_tools/render_factory/gold_s01_visual_v2
+          echo '55aa906d7f04a6ada7a75fbeee85bd685ebc88cb0cd5b6904a5a404effe0df00  premium_scene_compiler_exact_v3.part1.py' > /tmp/compiler-parts.sha256
+          echo '3b0bd8134dca4e3e3f661ca088cc4e53a55872c3498cf6c2a1ce889a4f565b66  premium_scene_compiler_exact_v3.part2.py' >> /tmp/compiler-parts.sha256
+          echo '0b7b16c209c9a4e37b757e7bda2286963e33c578b3580e2273922658577544a2  premium_scene_compiler_exact_v3.part3.py' >> /tmp/compiler-parts.sha256
+          (cd "$compiler_root/exact_v3" && sha256sum -c /tmp/compiler-parts.sha256)
+          cat "$compiler_root"/exact_v3/premium_scene_compiler_exact_v3.part{1,2,3}.py > /tmp/premium_scene_compiler_exact_v3.py
+          test "$(sha256sum /tmp/premium_scene_compiler_exact_v3.py | awk '{print $1}')" = '2f7cddec37054ca0d898c178a96d5b3d4859600e7757abaaf77924000abdf6af'
+          python3 -m py_compile "$compiler_root/premium_scene_compiler_exact_v3.py" "$compiler_root/premium_scene_compiler_v2.py" /tmp/premium_scene_compiler_exact_v3.py
+
+      - name: 04_run_actual_exact_source_v2_compiler
+        run: |
+          set -euo pipefail
+          psu="source/${PACKAGE_ROOT}/00_gold_psu_v2"
+          library="source/План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY"
+          module=production/03_modules/M1/L01/04_render_migration/gold_s01_visual_v2
+          compiler=production/11_tools/render_factory/gold_s01_visual_v2/premium_scene_compiler_v2.py
+          mkdir -p compiler-output
+          mandatory="$psu/GOLD_PSU_MANDATORY_VISUAL_MINIMUM_v1.json"
+          specs="$psu/GOLD_PSU_S01_PREMIUM_SHOT_SPECS_v2.json"
+          registry="$library/course_visual_audio_id_registry_v1.json"
+          assets="$module/asset_registry_v1.json"
+          timing="$module/timing_binding_v1.json"
+          python3 "$compiler" \
+            --source-dir source \
+            --production-dir production \
+            --source-repo "$SOURCE_REPO" \
+            --source-branch "$SOURCE_BRANCH" \
+            --source-sha "$SOURCE_HEAD" \
+            --package-root "$PACKAGE_ROOT" \
+            --mandatory-visual-minimum-file "$mandatory" \
+            --mandatory-visual-minimum-sha256 "$(sha256sum "$mandatory" | awk '{print $1}')" \
+            --premium-shot-specs-file "$specs" \
+            --premium-shot-specs-sha256 "$(sha256sum "$specs" | awk '{print $1}')" \
+            --shared-id-registry-file "$registry" \
+            --shared-id-registry-sha256 "$(sha256sum "$registry" | awk '{print $1}')" \
+            --timeline-file "$timing" \
+            --accepted-timing-sha256 "$ACCEPTED_TIMING_SHA256" \
+            --asset-registry-file "$assets" \
+            --asset-registry-sha256 "$(sha256sum "$assets" | awk '{print $1}')" \
+            --output-dir compiler-output \
+            | tee compiler-output/compiler-stdout.json
+
+      - name: 05_validate_actual_compiler_outputs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('compiler-output')
+          receipt=json.loads((root/'premium_compiler_receipt.json').read_text())
+          shot=json.loads((root/'resolved_premium_shot_ir.json').read_text())
+          scene=json.loads((root/'resolved_premium_scene_ir.json').read_text())
+          events=json.loads((root/'resolved_event_scene_binding.json').read_text())
+          assets=json.loads((root/'resolved_asset_materialization_plan.json').read_text())
+          shared=json.loads((root/'resolved_shared_ID_binding.json').read_text())
+          assert receipt['PREMIUM_COMPILER_ACTUAL_S01_RUN']=='PASS'
+          assert receipt['exact_source_head']=='acb45e07e7dbdda8a9595f7b426b7a9f0667ce4f'
+          assert receipt['shot_ir_count']==26 and shot['record_count']==26
+          assert receipt['scene_ir_count']==26 and scene['record_count']==26
+          assert receipt['source_visual_event_count']==24 and events['record_count']==24
+          assert receipt['unbound_event_count']==0 and events['unbound_event_count']==0
+          assert receipt['unknown_shared_id_count']==0 and shared['unknown_shared_ID_count']==0
+          assert receipt['missing_premium_field_count']==0
+          assert receipt['handwritten_unbound_sceneir_count']==0
+          assert receipt['generic_card_substitution_count']==0
+          assert receipt['required_asset_plan_empty_count']==0
+          assert assets['required_asset_count']==18
+          assert assets['adapted_asset_count']==18
+          assert assets['executable_export_proven_count']==18
+          assert assets['missing_asset_count']==0
+          assert assets['placeholder_asset_hash_count']==0
+          assert assets['asset_scene_consumption_coverage']=='100_PERCENT'
+          assert receipt['asset_provenance_coverage']=='100_PERCENT'
+          assert receipt['media_render_started'] is False
+          sums={}
+          for line in (root/'compiler_output_sha256sums.txt').read_text().splitlines():
+              digest,name=line.split('  ',1); sums[name]=digest
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
+          material={
+            'schema_version':'premium_compiler_remote_receipt.v1',
+            'result':'PASS',
+            'source_head':receipt['exact_source_head'],
+            'production_head':'ea9ec8e15361c02f5fe5dd8be3bc21bdf3f34c9a',
+            'compiler_receipt_sha256':sums['premium_compiler_receipt.json'],
+            'shot_ir_sha256':sums['resolved_premium_shot_ir.json'],
+            'scene_ir_sha256':sums['resolved_premium_scene_ir.json'],
+            'asset_manifest_sha256':sums['resolved_asset_materialization_plan.json'],
+            'event_binding_sha256':sums['resolved_event_scene_binding.json'],
+            'shared_ID_binding_sha256':sums['resolved_shared_ID_binding.json'],
+            'media_render_started':False,
+            'two_minute_render_authorized':False,
+            'full_15_minute_render_authorized':False,
+            'no_fake_green':True,
+          }
+          raw=json.dumps(material,sort_keys=True,separators=(',',':'))+'\n'
+          (root/'premium-compiler-remote-receipt.json').write_text(raw)
+          print(raw)
+          PY
+
+      - name: 06_upload_actual_compiler_outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-premium-compiler-${{ env.SOURCE_HEAD }}-${{ env.PRODUCTION_HEAD }}
+          path: compiler-output/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 07_stop_before_media_render
+        run: |
+          set -euo pipefail
+          echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=PASS'
+          echo 'SHOT_IR_COUNT=26'
+          echo 'SCENE_IR_COUNT=26'
+          echo 'MEDIA_RENDER_STARTED=false'
+          echo 'TWO_MINUTE_RENDER_AUTHORIZED=false'
+          echo 'FULL_15_MINUTE_RENDER_AUTHORIZED=false'
