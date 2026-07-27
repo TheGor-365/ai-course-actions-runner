@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${PRIVATE_REPO_PAT:?}" "${PRODUCTION_BRANCH:?}" "${PRODUCTION_RUNTIME_HEAD:?}" "${PRODUCTION_COMPILE_HEAD:?}"
-: "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${GH_TOKEN:?}" "${WORK:?}"
-for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD"; do test "${#value}" = 40; done
+WORK=${WORK:-"${GITHUB_WORKSPACE:-.}/work"}
 mkdir -p "$WORK/runtime-evidence"
 exec > >(tee "$WORK/runtime-evidence/runtime-discovery-command.log") 2>&1
-CURRENT_PHASE=INITIALIZED
+CURRENT_PHASE=ENVIRONMENT_PREFLIGHT
 on_exit() {
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -25,6 +23,9 @@ PY
   fi
 }
 trap on_exit EXIT
+: "${PRIVATE_REPO_PAT:?}" "${PRODUCTION_BRANCH:?}" "${PRODUCTION_RUNTIME_HEAD:?}" "${PRODUCTION_COMPILE_HEAD:?}"
+: "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${GH_TOKEN:?}"
+for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD"; do test "${#value}" = 40; done
 
 CURRENT_PHASE=CLONE_EXACT_PRODUCTION_HEAD
 echo "PHASE=$CURRENT_PHASE"
