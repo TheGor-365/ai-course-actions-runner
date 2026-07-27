@@ -27,7 +27,7 @@ trap on_exit EXIT
 : "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${GH_TOKEN:?}"
 for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD"; do test "${#value}" = 40; done
 
-if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+if [ "${GITHUB_EVENT_NAME:-}" = "push" ] || [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
   CURRENT_PHASE=MATERIALIZE_ACCEPTED_CAPTION_CARRIER
   echo "PHASE=$CURRENT_PHASE"
   carrier_branch=evidence/m1-l01-s01-accepted-captions-v1
