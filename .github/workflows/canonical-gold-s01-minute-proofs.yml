@@ -1,92 +1,188 @@
-name: Canonical Gold S01 Pre-render Closure
+name: Canonical Gold S01 Runtime Captions and Pre-render
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Controlled execution mode
+        description: Controlled no-media mode
         required: true
         type: choice
-        options:
-          - caption_packaging
-          - pre_render_only
-        default: pre_render_only
-      authority_manifest_path:
-        description: Exact immutable pre-render manifest path
+        options: [static_contract, runtime_discovery, component_evidence, caption_packaging, pre_render_only]
+        default: static_contract
+      runner_branch:
+        description: Exact runner branch
+        required: true
+        type: string
+      runner_head:
+        description: Exact runner branch head
+        required: true
+        type: string
+      production_branch:
+        description: Exact production runtime branch
         required: false
         type: string
-        default: config/GOLD_S01_TWO_MINUTE_PRE_RENDER_INPUT_v1.json
+      production_runtime_head:
+        description: Exact production runtime head
+        required: false
+        type: string
+      production_compile_head:
+        description: Immutable compiler input head
+        required: false
+        type: string
+      compiler_artifact_id:
+        description: Exact compiler artifact ID
+        required: false
+        type: string
+      compiler_artifact_sha256:
+        description: Exact compiler artifact archive SHA-256
+        required: false
+        type: string
+      caption_carrier_branch:
+        description: Exact caption carrier branch
+        required: false
+        type: string
+      caption_carrier_head:
+        description: Exact caption carrier head
+        required: false
+        type: string
       accepted_audio_head:
-        description: Exact accepted audio execution head
+        description: Accepted audio execution head
         required: false
         type: string
         default: 755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4
       caption_vtt_sha256:
-        description: Exact accepted VTT SHA-256; required for caption packaging
+        description: Exact accepted VTT SHA-256
         required: false
         type: string
+      caption_artifact_id:
+        description: Exact caption artifact ID
+        required: false
+        type: string
+      caption_artifact_sha256:
+        description: Exact caption artifact archive SHA-256
+        required: false
+        type: string
+      authority_manifest_path:
+        description: Immutable pre-render manifest path
+        required: false
+        type: string
+        default: config/GOLD_S01_PRE_RENDER_MANIFEST_v2.json
   push:
-    branches:
-      - worker/m1-l01-s01-runner-pre-render-finalization-v1
+    branches: [worker/m1-l01-s01-runner-pre-render-finalization-v1]
     paths:
       - .github/workflows/canonical-gold-s01-minute-proofs.yml
-      - scripts/gold_s01_pre_render_v1.py
-      - tests/test_gold_s01_pre_render_v1.py
+      - scripts/gold_s01_canonical_pre_render_v2.py
+      - scripts/gold_s01_runtime_discovery_v2.sh
+      - scripts/gold_s01_caption_packaging_v2.sh
+      - scripts/gold_s01_component_evidence_v2.sh
+      - scripts/gold_s01_pre_render_only_v2.sh
+      - tests/test_gold_s01_canonical_pre_render_v2.py
   pull_request:
     paths:
       - .github/workflows/canonical-gold-s01-minute-proofs.yml
-      - scripts/gold_s01_pre_render_v1.py
-      - tests/test_gold_s01_pre_render_v1.py
+      - scripts/gold_s01_canonical_pre_render_v2.py
+      - scripts/gold_s01_runtime_discovery_v2.sh
+      - scripts/gold_s01_caption_packaging_v2.sh
+      - scripts/gold_s01_component_evidence_v2.sh
+      - scripts/gold_s01_pre_render_only_v2.sh
+      - tests/test_gold_s01_canonical_pre_render_v2.py
 
 permissions:
   contents: read
   actions: write
-  pull-requests: write
-  issues: write
 
 concurrency:
-  group: gold-s01-pre-render-${{ github.ref }}-${{ inputs.mode || 'self_test' }}
+  group: canonical-gold-s01-${{ github.ref }}-${{ inputs.mode || 'static_contract' }}
   cancel-in-progress: false
 
 env:
   SOURCE_REPO: TheGor-365/ai-course-source-library
   PRODUCTION_REPO: TheGor-365/ai-course-production-system
-  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+  REMOTION_ROOT: 11_tools/render_factory/remotion
+  PREMIUM_ENTRYPOINT: src/goldS01VisualV2/PremiumRootV3.tsx
+  COMPOSITION_ID: GoldS01PremiumFirst120s
+  ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
+  ACCEPTED_CAPTION_JSON_SHA256: 5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18
+  A3483_SHA256: 74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352
   WORK: ${{ github.workspace }}/work
-  SOURCE_DIR: ${{ github.workspace }}/work/source
-  PRODUCTION_DIR: ${{ github.workspace }}/work/production
-  INPUT_DIR: ${{ github.workspace }}/work/inputs
-  COMPILED_DIR: ${{ github.workspace }}/work/compiled
-  PILOT_A_DIR: ${{ github.workspace }}/work/pilot_a
-  PILOT_B_DIR: ${{ github.workspace }}/work/pilot_b
-  RECEIPT_DIR: ${{ github.workspace }}/work/receipts
 
 jobs:
   static-contract:
     runs-on: ubuntu-24.04
     steps:
-      - name: 01_checkout_runner
+      - name: 01_checkout_exact_runner_head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (github.event_name == 'workflow_dispatch' && inputs.runner_head || github.sha) }}
           persist-credentials: false
-      - name: 02_compile_and_test_runner_contract
+      - name: 02_verify_exact_runner_identity
+        env:
+          DISPATCH_BRANCH: ${{ inputs.runner_branch }}
+          DISPATCH_HEAD: ${{ inputs.runner_head }}
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/gold_s01_pre_render_v1.py
-          python3 -m unittest tests.test_gold_s01_pre_render_v1 -v
-      - name: 03_assert_single_triggering_workflow
+          actual=$(git rev-parse HEAD)
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            expected='${{ github.event.pull_request.head.sha }}'; branch='${{ github.head_ref }}'
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            expected="$DISPATCH_HEAD"; branch="$DISPATCH_BRANCH"
+            test "${#expected}" = 40; test -n "$branch"; test -n "$PRIVATE_REPO_PAT"
+            remote=$(git ls-remote "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$branch" | awk '{print $1}')
+            test "$remote" = "$expected"
+          else
+            expected="$GITHUB_SHA"; branch="$GITHUB_REF_NAME"
+          fi
+          test "$actual" = "$expected"
+          printf 'RUNNER_BRANCH=%s\nRUNNER_HEAD=%s\n' "$branch" "$actual" | tee runner-identity.txt
+      - name: 03_compile_and_test_contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/gold_s01_canonical_pre_render_v2.py tests/test_gold_s01_canonical_pre_render_v2.py
+          bash -n scripts/gold_s01_runtime_discovery_v2.sh scripts/gold_s01_caption_packaging_v2.sh scripts/gold_s01_component_evidence_v2.sh scripts/gold_s01_pre_render_only_v2.sh
+          python3 -m unittest tests.test_gold_s01_canonical_pre_render_v2 -v
+      - name: 04_assert_single_triggering_workflow_and_no_media_route
         run: |
           set -euo pipefail
           canonical=.github/workflows/canonical-gold-s01-minute-proofs.yml
           test -f "$canonical"
-          dispatch_count=$(grep -Ec '^  workflow_dispatch:|^workflow_dispatch:' "$canonical")
-          legacy_count=$(find .github/workflows -maxdepth 1 -type f \
-            \( -iname '*gold*s01*.yml' -o -iname '*gold*s01*.yaml' -o -iname '*s01*gold*.yml' -o -iname '*s01*gold*.yaml' \) \
-            ! -name 'canonical-gold-s01-minute-proofs.yml' | wc -l)
-          echo "CANONICAL_WORKFLOW_DISPATCH_COUNT=$dispatch_count"
-          echo "DUPLICATE_GOLD_S01_WORKFLOW_COUNT=$legacy_count"
-          test "$dispatch_count" = 1
-          test "$legacy_count" = 0
+          duplicates=$(find .github/workflows -maxdepth 1 -type f \( -iname '*gold*s01*.yml' -o -iname '*gold*s01*.yaml' -o -iname '*s01*gold*.yml' -o -iname '*s01*gold*.yaml' \) ! -name 'canonical-gold-s01-minute-proofs.yml' -print)
+          test -z "$duplicates"
+          test "$(grep -Ec '^  workflow_dispatch:' "$canonical")" = 1
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('.github/workflows/canonical-gold-s01-minute-proofs.yml').read_text()
+          forbidden=['remotion '+'render','.'+'mp4','execute_'+'media','canonical-minute-proofs-media-held']
+          assert not any(item in text for item in forbidden)
+          PY
+          echo CANONICAL_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=1
+          echo DUPLICATE_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=0
+          echo MEDIA_JOB_REACHABLE=false
+
+  runtime-discovery:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'runtime_discovery' }}
+    needs: static-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ inputs.runner_head }}", persist-credentials: false}
+      - name: 02_execute_exact_runtime_discovery
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_BRANCH: ${{ inputs.production_branch }}
+          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head }}
+          PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head }}
+          COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id }}
+          COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 }}
+        run: scripts/gold_s01_runtime_discovery_v2.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head }}
+          path: ${{ env.WORK }}/runtime-evidence
+          if-no-files-found: error
+          retention-days: 30
 
   caption-packaging:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'caption_packaging' }}
@@ -94,78 +190,71 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: 01_checkout_runner
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: 02_clone_exact_private_audio_head
-        run: |
-          set -euo pipefail
-          test -n "$PRIVATE_REPO_PAT"
-          test "${{ inputs.accepted_audio_head }}" = "755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4"
-          mkdir -p "$WORK"
-          git init -q "$WORK/audio"
-          git -C "$WORK/audio" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
-          git -C "$WORK/audio" fetch -q --depth=1 origin "${{ inputs.accepted_audio_head }}"
-          git -C "$WORK/audio" checkout -q --detach FETCH_HEAD
-          test "$(git -C "$WORK/audio" rev-parse HEAD)" = "${{ inputs.accepted_audio_head }}"
-          git -C "$WORK/audio" remote set-url origin "https://github.com/${PRODUCTION_REPO}.git"
-      - name: 03_verify_exact_caption_paths_and_hashes
-        id: caption
+      - uses: actions/checkout@v4
+        with: {ref: "${{ inputs.runner_head }}", persist-credentials: false}
+      - name: 02_verify_and_stage_caption_carrier
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          root="$WORK/audio/sanitized_timing_handoff_v01"
-          json="$root/s01_ru_final_captions_v01.json"
-          vtt="$root/s01_ru_final_captions_v01.vtt"
-          timing="$root/s01_ru_accepted_timing_contract_v01.json"
-          test -f "$json"
-          test -f "$vtt"
-          test -f "$timing"
-          test "$(sha256sum "$json" | awk '{print $1}')" = "5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18"
-          test -n "${{ inputs.caption_vtt_sha256 }}"
-          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" --jq '.jobs[] | select(.name=="caption-packaging") | .id' | head -n1)
-          python3 scripts/gold_s01_pre_render_v1.py verify-captions \
-            --json "$json" --vtt "$vtt" --timing "$timing" \
-            --json-sha256 5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18 \
-            --vtt-sha256 "${{ inputs.caption_vtt_sha256 }}" \
-            --timing-sha256 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61 \
-            --run-id "$GITHUB_RUN_ID" --job-id "$job_id" \
-            --receipt "$WORK/caption_input_receipt.json"
-          python3 scripts/gold_s01_pre_render_v1.py stage-caption-pack \
-            --json "$json" --vtt "$vtt" --timing "$timing" \
-            --receipt "$WORK/caption_input_receipt.json" --output-dir "$WORK/caption-pack"
-          echo "artifact_name=gold-s01-accepted-ru-captions-v1-716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61" >> "$GITHUB_OUTPUT"
-      - name: 04_upload_caption_artifact
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          CAPTION_CARRIER_BRANCH: ${{ inputs.caption_carrier_branch }}
+          CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+        run: scripts/gold_s01_caption_packaging_v2.sh prepare
+      - name: 03_upload_public_caption_artifact
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.caption.outputs.artifact_name }}
+          name: gold-s01-accepted-ru-captions-v1-${{ env.ACCEPTED_TIMING_SHA256 }}
           path: ${{ env.WORK }}/caption-pack
           if-no-files-found: error
           retention-days: 90
-      - name: 05_redownload_and_verify_caption_artifact
+      - name: 04_redownload_and_verify_caption_identity
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$WORK/redownload"
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${{ steps.upload.outputs.artifact-id }}/zip" > "$WORK/captions.zip"
-          unzip -q "$WORK/captions.zip" -d "$WORK/redownload"
-          (cd "$WORK/redownload" && sha256sum -c SHA256SUMS)
-          json="$WORK/redownload/s01_ru_final_captions_v01.json"
-          vtt="$WORK/redownload/s01_ru_final_captions_v01.vtt"
-          timing="$WORK/redownload/s01_ru_accepted_timing_contract_v01.json"
-          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" --jq '.jobs[] | select(.name=="caption-packaging") | .id' | head -n1)
-          python3 scripts/gold_s01_pre_render_v1.py verify-captions \
-            --json "$json" --vtt "$vtt" --timing "$timing" \
-            --json-sha256 5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18 \
-            --vtt-sha256 "${{ inputs.caption_vtt_sha256 }}" \
-            --timing-sha256 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61 \
-            --artifact-id "${{ steps.upload.outputs.artifact-id }}" \
-            --run-id "$GITHUB_RUN_ID" --job-id "$job_id" --download-verified \
-            --receipt "$WORK/redownload/caption_input_receipt.json"
+          CAPTION_ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+        run: scripts/gold_s01_caption_packaging_v2.sh verify-download
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-caption-identity-${{ inputs.caption_carrier_head }}
+          path: |
+            ${{ env.WORK }}/caption-input-receipt.json
+            ${{ env.WORK }}/caption-stage-receipt.json
+            ${{ env.WORK }}/caption-download-receipt.json
+            ${{ env.WORK }}/caption-public-artifact-receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  component-evidence:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'component_evidence' }}
+    needs: static-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ inputs.runner_head }}", persist-credentials: false}
+      - name: 02_render_bounded_stills_and_validate_component_evidence
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_BRANCH: ${{ inputs.production_branch }}
+          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head }}
+          PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head }}
+          COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id }}
+          COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 }}
+          CAPTION_ARTIFACT_ID: ${{ inputs.caption_artifact_id }}
+          CAPTION_ARTIFACT_SHA256: ${{ inputs.caption_artifact_sha256 }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+        run: scripts/gold_s01_component_evidence_v2.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-component-evidence-${{ inputs.production_runtime_head }}
+          path: ${{ env.WORK }}/component-evidence
+          if-no-files-found: error
+          retention-days: 90
 
   pre-render-only:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'pre_render_only' }}
@@ -173,136 +262,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - name: 01_checkout_runner
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: 02_verify_exact_manifest
-        run: |
-          set -euo pipefail
-          python3 scripts/gold_s01_pre_render_v1.py verify-manifest \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --receipt "$WORK/manifest_validation.json"
-      - name: 03_clone_exact_source
-        run: |
-          set -euo pipefail
-          test -n "$PRIVATE_REPO_PAT"
-          manifest="${{ inputs.authority_manifest_path }}"
-          branch=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key source_branch)
-          head=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key source_head)
-          mkdir -p "$WORK"
-          git init -q "$WORK/source"
-          git -C "$WORK/source" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
-          test "$(git -C "$WORK/source" ls-remote origin "refs/heads/$branch" | awk '{print $1}')" = "$head"
-          git -C "$WORK/source" fetch -q --depth=1 origin "$head"
-          git -C "$WORK/source" checkout -q --detach FETCH_HEAD
-          git -C "$WORK/source" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
-          test "$(git -C "$WORK/source" rev-parse HEAD)" = "$head"
-      - name: 04_clone_exact_production_and_OC
-        run: |
-          set -euo pipefail
-          manifest="${{ inputs.authority_manifest_path }}"
-          branch=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key production_branch)
-          head=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key production_head)
-          oc_head=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key oc_head)
-          git init -q "$WORK/production"
-          git -C "$WORK/production" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
-          test "$(git -C "$WORK/production" ls-remote origin "refs/heads/$branch" | awk '{print $1}')" = "$head"
-          git -C "$WORK/production" fetch -q origin "$head" "$oc_head"
-          git -C "$WORK/production" checkout -q --detach "$head"
-          git -C "$WORK/production" remote set-url origin "https://github.com/${PRODUCTION_REPO}.git"
-          test "$(git -C "$WORK/production" rev-parse HEAD)" = "$head"
-          git -C "$WORK/production" show "$oc_head:00_control/FACTORY_OPERATION_CENTER.md" > "$WORK/FACTORY_OPERATION_CENTER.md"
-          grep -q '^# FACTORY_OPERATION_CENTER_v36$' "$WORK/FACTORY_OPERATION_CENTER.md"
-          test "$(git hash-object "$WORK/FACTORY_OPERATION_CENTER.md")" = "f41935cd1163a6aadc1aac89d6c59e2057402c5e"
-      - name: 05_verify_source_and_production_receipts
-        run: |
-          set -euo pipefail
-          manifest="${{ inputs.authority_manifest_path }}"
-          source_receipt=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key source_receipt_path)
-          production_receipt=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key production_receipt_path)
-          python3 scripts/gold_s01_pre_render_v1.py verify-file \
-            --path "$WORK/source/$source_receipt" \
-            --sha256 "$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key source_receipt_hash)"
-          python3 scripts/gold_s01_pre_render_v1.py verify-file \
-            --path "$WORK/production/$production_receipt" \
-            --sha256 "$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key production_receipt_hash)"
-      - name: 06_download_and_verify_A3483
+      - uses: actions/checkout@v4
+        with: {ref: "${{ inputs.runner_head }}", persist-credentials: false}
+      - name: 02_execute_exact_pre_render_without_media
         env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$WORK/inputs/audio"
-          gh release download gold-s01-a3483-input-v1 --repo "$GITHUB_REPOSITORY" \
-            --pattern M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav --dir "$WORK/inputs/audio"
-          python3 scripts/gold_s01_pre_render_v1.py verify-file \
-            --path "$WORK/inputs/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
-            --sha256 74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352
-      - name: 07_download_and_verify_caption_artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          manifest="${{ inputs.authority_manifest_path }}"
-          artifact_id=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key caption_artifact_id)
-          mkdir -p "$WORK/inputs/captions"
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "$WORK/captions.zip"
-          unzip -q "$WORK/captions.zip" -d "$WORK/inputs/captions"
-          (cd "$WORK/inputs/captions" && sha256sum -c SHA256SUMS)
-          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" --jq '.jobs[] | select(.name=="pre-render-only") | .id' | head -n1)
-          python3 scripts/gold_s01_pre_render_v1.py verify-captions \
-            --json "$WORK/inputs/captions/s01_ru_final_captions_v01.json" \
-            --vtt "$WORK/inputs/captions/s01_ru_final_captions_v01.vtt" \
-            --timing "$WORK/inputs/captions/s01_ru_accepted_timing_contract_v01.json" \
-            --json-sha256 "$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key caption_json_sha)" \
-            --vtt-sha256 "$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key caption_vtt_sha)" \
-            --timing-sha256 "$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key accepted_timing_sha)" \
-            --artifact-id "$artifact_id" --run-id "$GITHUB_RUN_ID" --job-id "$job_id" --download-verified \
-            --receipt "$WORK/inputs/captions/caption_input_receipt.json"
-      - name: 08_discover_compositions_and_typecheck
-        run: |
-          set -euo pipefail
-          remotion_root=$(find "$WORK/production" -name package.json -type f -print0 | \
-            xargs -0 grep -Il '"remotion"' | sed 's#/package.json$##' | head -n1)
-          test -n "$remotion_root"
-          cd "$remotion_root"
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx remotion compositions > "$WORK/compositions.txt"
-          test -s "$WORK/compositions.txt"
-          npm run typecheck --if-present
-      - name: 09_run_all_no_render_validators
-        run: |
-          set -euo pipefail
-          manifest="${{ inputs.authority_manifest_path }}"
-          source_receipt=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key source_receipt_path)
-          production_receipt=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key production_receipt_path)
-          compiler_dir=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key compiler_output_dir)
-          component_evidence=$(python3 scripts/gold_s01_pre_render_v1.py get --manifest "$manifest" --key component_evidence_path)
-          python3 "$WORK/production/04_validators/render/premium_qc/validate_gold_s01_pre_render_inputs_v1.py" \
-            --source-receipt "$WORK/source/$source_receipt" \
-            --production-receipt "$WORK/production/$production_receipt" \
-            --compiler-output-dir "$WORK/production/$compiler_dir" \
-            --component-evidence "$WORK/production/$component_evidence" \
-            --caption-input-receipt "$WORK/inputs/captions/caption_input_receipt.json" \
-            --pre-render-mode --output "$WORK/production_validation_receipt.json"
-      - name: 10_write_pre_render_receipt
-        id: receipt
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" --jq '.jobs[] | select(.name=="pre-render-only") | .id' | head -n1)
-          python3 scripts/gold_s01_pre_render_v1.py write-pre-render-receipt \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --production-validation-receipt "$WORK/production_validation_receipt.json" \
-            --receipt "$WORK/pre_render_receipt.json" \
-            --run-id "$GITHUB_RUN_ID" --job-id "$job_id" --runner-head "$GITHUB_SHA" \
-            --source-clone-pass --production-clone-pass --oc-pass --composition-pass --typecheck-pass
-          mkdir -p "$WORK/pre-render-artifact"
-          cp "$WORK/pre_render_receipt.json" "$WORK/production_validation_receipt.json" \
-             "$WORK/manifest_validation.json" "$WORK/compositions.txt" "$WORK/pre-render-artifact/"
-          (cd "$WORK/pre-render-artifact" && sha256sum * > SHA256SUMS)
-      - name: 11_upload_sanitized_pre_render_artifact
+          AUTHORITY_MANIFEST_PATH: ${{ inputs.authority_manifest_path }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: scripts/gold_s01_pre_render_only_v2.sh
+      - name: 03_upload_sanitized_pre_render_receipt
         id: upload
         uses: actions/upload-artifact@v4
         with:
@@ -310,402 +279,18 @@ jobs:
           path: ${{ env.WORK }}/pre-render-artifact
           if-no-files-found: error
           retention-days: 90
-      - name: 12_redownload_and_verify_pre_render_artifact
+      - name: 04_redownload_identity_and_stop_before_media
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p "$WORK/redownload-pre-render"
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${{ steps.upload.outputs.artifact-id }}/zip" > "$WORK/pre-render.zip"
-          unzip -q "$WORK/pre-render.zip" -d "$WORK/redownload-pre-render"
-          (cd "$WORK/redownload-pre-render" && sha256sum -c SHA256SUMS)
-          test "$(python3 -c 'import json;print(str(json.load(open("'"$WORK/redownload-pre-render/pre_render_receipt.json"'"))["media_render_started"]).lower())')" = false
-
-  canonical-minute-proofs-media-held:
-    if: ${{ false }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 360
-
-    steps:
-      - name: 01_checkout_runner
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          show-progress: false
-
-      - name: 02_clone_exact_source
-        run: |
-          set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "worker/canonical-gold-s01-minute-proofs-v2"
-          test -n "$PRIVATE_REPO_PAT"
-          mkdir -p "$WORK" "$RECEIPT_DIR"
-          source_sha=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_RECONCILED)
-          lane_a=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_LANE_A)
-          lane_b=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_HEAD_LANE_B)
-          source_branch=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key SOURCE_BRANCH_RECONCILED)
-          git init -q "$SOURCE_DIR"
-          git -C "$SOURCE_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
-          test "$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/${source_branch}" | awk '{print $1}')" = "$source_sha"
-          git -C "$SOURCE_DIR" fetch -q --filter=blob:none origin "$source_sha" "$lane_a" "$lane_b"
-          git -C "$SOURCE_DIR" checkout -q --detach "$source_sha"
-          git -C "$SOURCE_DIR" remote set-url origin "https://github.com/${SOURCE_REPO}.git"
-          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$source_sha"
-          test -z "$(git -C "$SOURCE_DIR" status --porcelain)"
-
-      - name: 03_clone_exact_production
-        run: |
-          set -euo pipefail
-          production_sha=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_RECONCILED)
-          lane_c=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_C)
-          lane_d=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_D)
-          lane_e=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_HEAD_LANE_E)
-          oc_head=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key OC_HEAD)
-          production_branch=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key PRODUCTION_BRANCH_RECONCILED)
-          git init -q "$PRODUCTION_DIR"
-          git -C "$PRODUCTION_DIR" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
-          test "$(git -C "$PRODUCTION_DIR" ls-remote origin "refs/heads/${production_branch}" | awk '{print $1}')" = "$production_sha"
-          git -C "$PRODUCTION_DIR" fetch -q --filter=blob:none origin "$production_sha" "$lane_c" "$lane_d" "$lane_e" "$oc_head"
-          git -C "$PRODUCTION_DIR" checkout -q --detach "$production_sha"
-          git -C "$PRODUCTION_DIR" remote set-url origin "https://github.com/${PRODUCTION_REPO}.git"
-          test "$(git -C "$PRODUCTION_DIR" rev-parse HEAD)" = "$production_sha"
-          test -z "$(git -C "$PRODUCTION_DIR" status --porcelain)"
-
-      - name: 04_verify_OC_and_lane_receipts
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-authority \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --source-dir "$SOURCE_DIR" \
-            --production-dir "$PRODUCTION_DIR" \
-            --receipt "$RECEIPT_DIR/04_authority_receipt.json"
-          test "${{ inputs.execute_media }}" = "true"
-
-      - name: 05_verify_PSU_closure
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_psu_closure \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-            --manifest "${{ inputs.authority_manifest_path }}" --key PSU_CLOSURE_SHA256 \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-
-      - name: 06_run_reference_compiler
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage run_reference_compiler \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          for key in SHARED_ID_REGISTRY_SHA256 COMPILER_SHA256; do
-            python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-              --manifest "${{ inputs.authority_manifest_path }}" --key "$key" \
-              --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-          done
-
-      - name: 07_run_premium_production_compiler
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage run_premium_production_compiler \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          for key in PREMIUM_SHOT_SPEC_SHA256 ShotIR_SHA256 SceneIR_SHA256; do
-            python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-              --manifest "${{ inputs.authority_manifest_path }}" --key "$key" \
-              --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-          done
-
-      - name: 08_verify_assets
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_assets \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-            --manifest "${{ inputs.authority_manifest_path }}" --key ASSET_MANIFEST_SHA256 \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-
-      - name: 09_verify_runtime_binding
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage verify_runtime_binding \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-            --manifest "${{ inputs.authority_manifest_path }}" --key RUNTIME_BINDING_SHA256 \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-
-      - name: 10_run_no_render_QC
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage run_no_render_qc \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-identity \
-            --manifest "${{ inputs.authority_manifest_path }}" --key QC_MANIFEST_SHA256 \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" --compiled-dir "$COMPILED_DIR"
-
-      - name: 11_install_node_and_browser
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends ffmpeg unzip jq fontconfig fonts-dejavu-core fonts-liberation
-          remotion_root=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key REMOTION_ROOT)
-          cd "$PRODUCTION_DIR/$remotion_root"
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx remotion browser ensure
-
-      - name: 12_discover_compositions
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage discover_compositions \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR"
-
-      - name: 13_download_A3483
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$INPUT_DIR/audio"
-          gh release download gold-s01-a3483-input-v1 \
-            --repo TheGor-365/ai-course-actions-runner \
-            --pattern M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav \
-            --dir "$INPUT_DIR/audio"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-audio \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
-            --receipt "$RECEIPT_DIR/13_audio_receipt.json"
-
-      - name: 14_materialize_and_verify_captions
-        env:
-          CAPTION_ARTIFACT_REPO: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_REPO }}
-          CAPTION_ARTIFACT_ID: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ID }}
-          CAPTION_ARTIFACT_ZIP_SHA256: ${{ vars.GOLD_S01_ACCEPTED_CAPTION_ARTIFACT_ZIP_SHA256 }}
-        run: |
-          set -euo pipefail
-          test -n "$CAPTION_ARTIFACT_REPO"
-          test -n "$CAPTION_ARTIFACT_ID"
-          test -n "$CAPTION_ARTIFACT_ZIP_SHA256"
-          test "$CAPTION_ARTIFACT_REPO" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_REPOSITORY)"
-          test "$CAPTION_ARTIFACT_ID" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_ID)"
-          test "$CAPTION_ARTIFACT_ZIP_SHA256" = "$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key CAPTION_ARTIFACT_ZIP_SHA256)"
-          mkdir -p "$INPUT_DIR/captions" "$WORK/caption-pack"
-          zip="$WORK/accepted-captions.zip"
-          curl --fail --location --silent --show-error \
-            -H "Authorization: Bearer ${PRIVATE_REPO_PAT}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${CAPTION_ARTIFACT_REPO}/actions/artifacts/${CAPTION_ARTIFACT_ID}/zip" \
-            --output "$zip"
-          test "$(sha256sum "$zip" | awk '{print $1}')" = "$CAPTION_ARTIFACT_ZIP_SHA256"
-          unzip -q "$zip" -d "$WORK/caption-pack"
-          mapfile -t jsons < <(find "$WORK/caption-pack" -type f -name s01_ru_final_captions_v01.json)
-          mapfile -t vtts < <(find "$WORK/caption-pack" -type f -name s01_ru_final_captions_v01.vtt)
-          test "${#jsons[@]}" = 1
-          test "${#vtts[@]}" = 1
-          cp "${jsons[0]}" "$INPUT_DIR/captions/s01_ru_final_captions_v01.json"
-          cp "${vtts[0]}" "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-captions \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
-            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
-            --receipt "$RECEIPT_DIR/14_caption_receipt.json"
-
-      - name: 15_render_Pilot_A_visual
-        run: |
-          set -euo pipefail
-          mkdir -p "$PILOT_A_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage render_pilot_a_visual \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_A_DIR"
-
-      - name: 16_extract_Pilot_A_audio_window
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py extract-audio \
-            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
-            --start-ms 0 --duration-ms 60000 \
-            --output "$PILOT_A_DIR/audio_window.wav" \
-            --receipt "$PILOT_A_DIR/audio_window_receipt.json"
-
-      - name: 17_extract_Pilot_A_caption_window
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py caption-window \
-            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_a \
-            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
-            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
-            --output-dir "$PILOT_A_DIR"
-
-      - name: 18_mux_Pilot_A
-        run: |
-          set -euo pipefail
-          ffmpeg -hide_banner -loglevel error -y \
-            -i "$PILOT_A_DIR/visual.mp4" -i "$PILOT_A_DIR/audio_window.wav" \
-            -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 320k -shortest \
-            "$PILOT_A_DIR/pilot_a.mp4"
-          rm -f "$PILOT_A_DIR/visual.mp4" "$PILOT_A_DIR/audio_window.wav"
-          ffprobe -v error -show_format -show_streams -of json "$PILOT_A_DIR/pilot_a.mp4" > "$PILOT_A_DIR/ffprobe.json"
-
-      - name: 19_run_Pilot_A_event_and_media_QC
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage run_pilot_a_event_and_media_qc \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_A_DIR"
-
-      - name: 20_render_Pilot_B_visual
-        run: |
-          set -euo pipefail
-          mkdir -p "$PILOT_B_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-pilot-b-selection \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --events "$COMPILED_DIR/event_telemetry_plan.json" \
-            --selection "$COMPILED_DIR/pilot_b_selection.json" \
-            --receipt "$RECEIPT_DIR/20_pilot_b_selection_receipt.json"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage render_pilot_b_visual \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_B_DIR"
-
-      - name: 21_extract_Pilot_B_audio_window
-        run: |
-          set -euo pipefail
-          start_ms=$(python3 -c 'import json;print(json.load(open("'"$COMPILED_DIR/pilot_b_selection.json"'"))["start_ms"])')
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py extract-audio \
-            --audio "$INPUT_DIR/audio/M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav" \
-            --start-ms "$start_ms" --duration-ms 60000 \
-            --output "$PILOT_B_DIR/audio_window.wav" \
-            --receipt "$PILOT_B_DIR/audio_window_receipt.json"
-
-      - name: 22_extract_Pilot_B_caption_window
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py caption-window \
-            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_b \
-            --selection "$COMPILED_DIR/pilot_b_selection.json" \
-            --json "$INPUT_DIR/captions/s01_ru_final_captions_v01.json" \
-            --vtt "$INPUT_DIR/captions/s01_ru_final_captions_v01.vtt" \
-            --output-dir "$PILOT_B_DIR"
-
-      - name: 23_mux_Pilot_B
-        run: |
-          set -euo pipefail
-          ffmpeg -hide_banner -loglevel error -y \
-            -i "$PILOT_B_DIR/visual.mp4" -i "$PILOT_B_DIR/audio_window.wav" \
-            -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 320k -shortest \
-            "$PILOT_B_DIR/pilot_b.mp4"
-          rm -f "$PILOT_B_DIR/visual.mp4" "$PILOT_B_DIR/audio_window.wav"
-          ffprobe -v error -show_format -show_streams -of json "$PILOT_B_DIR/pilot_b.mp4" > "$PILOT_B_DIR/ffprobe.json"
-
-      - name: 24_run_Pilot_B_code_event_and_media_QC
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage run_pilot_b_code_event_and_media_qc \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$PILOT_B_DIR"
-
-      - name: 25_build_contact_sheets
-        run: |
-          set -euo pipefail
-          for pilot in "$PILOT_A_DIR/pilot_a.mp4" "$PILOT_B_DIR/pilot_b.mp4"; do
-            dir=$(dirname "$pilot")
-            ffmpeg -hide_banner -loglevel error -y -i "$pilot" \
-              -vf "fps=1/6,scale=480:-1,tile=5x2" -frames:v 1 "$dir/contact_sheet.png"
-          done
-
-      - name: 26_build_owner_evidence
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py bridge \
-            --manifest "${{ inputs.authority_manifest_path }}" --stage build_owner_evidence \
-            --source-dir "$SOURCE_DIR" --production-dir "$PRODUCTION_DIR" \
-            --compiled-dir "$COMPILED_DIR" --receipt-dir "$RECEIPT_DIR" --output-dir "$WORK"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py package \
-            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_a \
-            --pilot-dir "$PILOT_A_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py package \
-            --manifest "${{ inputs.authority_manifest_path }}" --pilot pilot_b \
-            --pilot-dir "$PILOT_B_DIR" --receipt-dir "$RECEIPT_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py sanitize-artifact --artifact-dir "$PILOT_A_DIR"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py sanitize-artifact --artifact-dir "$PILOT_B_DIR"
-
-      - name: 27_upload_canonical_artifacts
-        id: upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-gold-s01-pilot-a-${{ github.run_id }}
-          path: ${{ env.PILOT_A_DIR }}
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: 27_upload_canonical_artifacts_Pilot_B
-        id: upload_b
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-gold-s01-pilot-b-${{ github.run_id }}
-          path: ${{ env.PILOT_B_DIR }}
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: 28_redownload_artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$WORK/redownload/a" "$WORK/redownload/b"
-          for spec in \
-            "${{ steps.upload.outputs.artifact-id }}|$WORK/redownload/a/a.zip|$WORK/redownload/a" \
-            "${{ steps.upload_b.outputs.artifact-id }}|$WORK/redownload/b/b.zip|$WORK/redownload/b"; do
-            IFS='|' read -r id zip dir <<< "$spec"
-            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$zip"
-            unzip -q "$zip" -d "$dir/unpacked"
-          done
-
-      - name: 29_verify_MP4_hashes
-        run: |
-          set -euo pipefail
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-artifact \
-            --artifact-dir "$WORK/redownload/a/unpacked" \
-            --expected "$PILOT_A_DIR/owner_review_manifest.json" \
-            --receipt "$RECEIPT_DIR/29_pilot_a_identity.json"
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py verify-artifact \
-            --artifact-dir "$WORK/redownload/b/unpacked" \
-            --expected "$PILOT_B_DIR/owner_review_manifest.json" \
-            --receipt "$RECEIPT_DIR/29_pilot_b_identity.json"
-
-      - name: 30_writeback_receipts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          job_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
-            --jq '.jobs[] | select(.name=="canonical-minute-proofs") | .id' | head -n1)
-          test -n "$job_id"
-          summary=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py final-summary \
-            --manifest "${{ inputs.authority_manifest_path }}" \
-            --run-id "$GITHUB_RUN_ID" \
-            --job-id "$job_id" \
-            --artifact-a "${{ steps.upload.outputs.artifact-id }}" \
-            --artifact-b "${{ steps.upload_b.outputs.artifact-id }}" \
-            --receipt-dir "$RECEIPT_DIR")
-          for issue in 364 357 344; do
-            gh api "repos/TheGor-365/ai-course-production-system/issues/${issue}/comments" -f body="$summary" >/dev/null
-          done
-          runner_pr=$(python3 scripts/canonical_gold_s01_minute_proofs_v2.py get --manifest "${{ inputs.authority_manifest_path }}" --key RUNNER_PR_NUMBER)
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${runner_pr}/comments" -f body="$summary" >/dev/null
-          python3 scripts/canonical_gold_s01_minute_proofs_v2.py upstream-targets \
-            --manifest "${{ inputs.authority_manifest_path }}" |
-          while IFS='|' read -r repo pr; do
-            gh api "repos/${repo}/issues/${pr}/comments" -f body="$summary" >/dev/null
-          done
+          mkdir -p "$WORK/pre-render-redownload"
+          unzip -q "$WORK/pre-render.zip" -d "$WORK/pre-render-redownload"
+          (cd "$WORK/pre-render-redownload" && sha256sum -c SHA256SUMS)
+          test "$(python3 -c 'import json;print(str(json.load(open("'"$WORK/pre-render-redownload/pre-render-receipt.json"'"))["media_render_started"]).lower())')" = false
+          echo PUBLIC_PRE_RENDER_GREEN=true
+          echo REAL_JOB_STEPS_AVAILABLE=true
+          echo MEDIA_RENDER_STARTED=false
+          echo TWO_MINUTE_RENDER_AUTHORIZED=false
+          echo FULL_15_MINUTE_RENDER_AUTHORIZED=false
