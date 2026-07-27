@@ -3,23 +3,17 @@ name: Gold S01 Premium Compiler Exact v3
 on:
   push:
     branches: [worker/m1-l01-s01-runner-pre-render-finalization-v1]
-    paths: ['.github/workflows/gold-s01-premium-compiler-exact-v3.yml']
+    paths:
+      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+      - 'config/gold_s01_premium_compiler_exact_v3.json'
   pull_request:
-    paths: ['.github/workflows/gold-s01-premium-compiler-exact-v3.yml']
+    paths:
+      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+      - 'config/gold_s01_premium_compiler_exact_v3.json'
   workflow_dispatch:
 
 permissions:
   contents: read
-
-env:
-  SOURCE_REPO: TheGor-365/ai-course-source-library
-  SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-final-exact-repair-v1
-  SOURCE_HEAD: 4cfc9acd1509408f86c8b3a788779173395bbb2f
-  PRODUCTION_REPO: TheGor-365/ai-course-production-system
-  PRODUCTION_BRANCH: worker/m1-l01-s01-premium-production-finalization-v1
-  PRODUCTION_HEAD: 9b1eeec495bfbd6fa712d5bb1d1b00f4622b5556
-  PACKAGE_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
-  ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
 
 jobs:
   compile-exact-s01:
@@ -32,7 +26,30 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: 02_clone_exact_source_and_production
+      - name: 02_load_and_validate_exact_inputs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('config/gold_s01_premium_compiler_exact_v3.json')
+          d=json.loads(p.read_text())
+          assert d['schema_version']=='gold_s01_premium_compiler_exact_inputs.v3'
+          for key in ('source_repository','source_branch','source_head','production_repository','production_branch','production_head','package_root','accepted_timing_sha256'):
+              assert isinstance(d[key],str) and d[key]
+          assert len(d['source_head'])==len(d['production_head'])==40
+          assert len(d['accepted_timing_sha256'])==64
+          assert d['media_render_authorized'] is False
+          assert d['two_minute_render_authorized'] is False
+          assert d['full_15_minute_render_authorized'] is False
+          assert d['no_fake_green'] is True
+          mapping={'SOURCE_REPO':'source_repository','SOURCE_BRANCH':'source_branch','SOURCE_HEAD':'source_head','PRODUCTION_REPO':'production_repository','PRODUCTION_BRANCH':'production_branch','PRODUCTION_HEAD':'production_head','PACKAGE_ROOT':'package_root','ACCEPTED_TIMING_SHA256':'accepted_timing_sha256'}
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as fh:
+              for env,key in mapping.items(): fh.write(f'{env}={d[key]}\n')
+          print(json.dumps(d,sort_keys=True))
+          PY
+
+      - name: 03_clone_exact_source_and_production
         env:
           PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
         run: |
@@ -52,7 +69,7 @@ jobs:
           clone_exact "$SOURCE_REPO" "$SOURCE_BRANCH" "$SOURCE_HEAD" source
           clone_exact "$PRODUCTION_REPO" "$PRODUCTION_BRANCH" "$PRODUCTION_HEAD" production
 
-      - name: 03_verify_compiler_identity_and_syntax
+      - name: 04_verify_compiler_identity_and_syntax
         run: |
           set -euo pipefail
           root=production/11_tools/render_factory/gold_s01_visual_v2
@@ -65,7 +82,7 @@ jobs:
           test "$(sha256sum /tmp/compiler.py | awk '{print $1}')" = 2f7cddec37054ca0d898c178a96d5b3d4859600e7757abaaf77924000abdf6af
           python3 -m py_compile "$root/premium_scene_compiler_exact_v3.py" "$root/premium_scene_compiler_v2.py" /tmp/compiler.py
 
-      - name: 04_run_actual_exact_source_v2_compiler
+      - name: 05_run_actual_exact_source_v2_compiler
         id: compiler
         continue-on-error: true
         run: |
@@ -96,7 +113,7 @@ jobs:
           cat compiler-output/compiler.log
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
-      - name: 05_upload_compiler_diagnostics
+      - name: 06_upload_compiler_diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -105,14 +122,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: 06_fail_closed_on_compiler_error
+      - name: 07_fail_closed_on_compiler_error
         if: steps.compiler.outputs.exit_code != '0'
         run: |
           echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=FAIL'
           echo 'MEDIA_RENDER_STARTED=false'
           exit 1
 
-      - name: 07_validate_actual_compiler_outputs
+      - name: 08_validate_actual_compiler_outputs
         if: steps.compiler.outputs.exit_code == '0'
         run: |
           set -euo pipefail
@@ -150,7 +167,7 @@ jobs:
           print(raw)
           PY
 
-      - name: 08_upload_actual_compiler_outputs
+      - name: 09_upload_actual_compiler_outputs
         if: steps.compiler.outputs.exit_code == '0'
         uses: actions/upload-artifact@v4
         with:
@@ -159,7 +176,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 09_stop_before_media_render
+      - name: 10_stop_before_media_render
         if: steps.compiler.outputs.exit_code == '0'
         run: |
           echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=PASS'
