@@ -4,6 +4,30 @@ set -euo pipefail
 : "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${GH_TOKEN:?}" "${WORK:?}"
 for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD"; do test "${#value}" = 40; done
 mkdir -p "$WORK/runtime-evidence"
+exec > >(tee "$WORK/runtime-evidence/runtime-discovery-command.log") 2>&1
+CURRENT_PHASE=INITIALIZED
+on_exit() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    python3 - "$status" "$CURRENT_PHASE" "$WORK/runtime-evidence/runtime-discovery-failure.json" <<'PY'
+import json, sys
+from pathlib import Path
+status, phase, output = int(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+output.write_text(json.dumps({
+    'schema_version': 'gold_s01_runtime_discovery_failure.v1',
+    'result': 'FAIL',
+    'exit_code': status,
+    'failed_phase': phase,
+    'media_render_started': False,
+    'no_fake_green': True,
+}, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+PY
+  fi
+}
+trap on_exit EXIT
+
+CURRENT_PHASE=CLONE_EXACT_PRODUCTION_HEAD
+echo "PHASE=$CURRENT_PHASE"
 git init -q "$WORK/production"
 git -C "$WORK/production" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
 test "$(git -C "$WORK/production" ls-remote origin "refs/heads/$PRODUCTION_BRANCH" | awk '{print $1}')" = "$PRODUCTION_RUNTIME_HEAD"
@@ -11,6 +35,9 @@ git -C "$WORK/production" fetch -q origin "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTIO
 git -C "$WORK/production" checkout -q --detach "$PRODUCTION_RUNTIME_HEAD"
 git -C "$WORK/production" remote set-url origin "https://github.com/${PRODUCTION_REPO}.git"
 test "$(git -C "$WORK/production" rev-parse HEAD)" = "$PRODUCTION_RUNTIME_HEAD"
+
+CURRENT_PHASE=VERIFY_COMPILE_RUNTIME_ANCESTRY
+echo "PHASE=$CURRENT_PHASE"
 git -C "$WORK/production" merge-base --is-ancestor "$PRODUCTION_COMPILE_HEAD" "$PRODUCTION_RUNTIME_HEAD"
 git -C "$WORK/production" diff --quiet "$PRODUCTION_COMPILE_HEAD" "$PRODUCTION_RUNTIME_HEAD" -- \
   11_tools/render_factory/gold_s01_visual_v2/premium_scene_compiler_v2.py \
@@ -20,21 +47,50 @@ git -C "$WORK/production" diff --quiet "$PRODUCTION_COMPILE_HEAD" "$PRODUCTION_R
   03_modules/M1/L01/04_render_migration/gold_s01_visual_v2/timing_binding_v1.json \
   03_modules/M1/L01/04_render_migration/gold_s01_visual_v2/premium_production_source_binding_v1.json
 echo COMPILER_RERUN_REQUIRED=false
+
+CURRENT_PHASE=DOWNLOAD_AND_STAGE_COMPILER_ARTIFACT
+echo "PHASE=$CURRENT_PHASE"
 gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${COMPILER_ARTIFACT_ID}/zip" > "$WORK/compiler.zip"
 test "$(sha256sum "$WORK/compiler.zip" | awk '{print $1}')" = "$COMPILER_ARTIFACT_SHA256"
 python3 "$WORK/production/11_tools/render_factory/gold_s01_visual_v2/stage_premium_compiler_artifact_v3.py" \
   --production-root "$WORK/production" --archive "$WORK/compiler.zip" \
   --receipt "$WORK/runtime-evidence/compiler-staging-receipt.json"
+
+CURRENT_PHASE=NPM_CI
+echo "PHASE=$CURRENT_PHASE"
 (
   cd "$WORK/production/$REMOTION_ROOT"
   npm ci
+)
+CURRENT_PHASE=TYPECHECK
+echo "PHASE=$CURRENT_PHASE"
+(
+  cd "$WORK/production/$REMOTION_ROOT"
   npm run typecheck | tee "$WORK/runtime-evidence/typecheck.log"
+)
+CURRENT_PHASE=EVENT_RUNTIME_TESTS
+echo "PHASE=$CURRENT_PHASE"
+(
+  cd "$WORK/production/$REMOTION_ROOT"
   npm run test:event-runtime | tee "$WORK/runtime-evidence/event-runtime.log"
+)
+CURRENT_PHASE=PRODUCTION_INTEGRATION_TESTS
+echo "PHASE=$CURRENT_PHASE"
+(
+  cd "$WORK/production/$REMOTION_ROOT"
   npm run test:premium-production-integration | tee "$WORK/runtime-evidence/production-integration.log"
+)
+CURRENT_PHASE=COMPOSITION_DISCOVERY
+echo "PHASE=$CURRENT_PHASE"
+(
+  cd "$WORK/production/$REMOTION_ROOT"
   npx remotion compositions "$PREMIUM_ENTRYPOINT" --log=verbose | tee "$WORK/runtime-evidence/compositions.log"
 )
 grep -F "$COMPOSITION_ID" "$WORK/runtime-evidence/compositions.log"
 grep -E '3600|00:02:00' "$WORK/runtime-evidence/compositions.log"
+
+CURRENT_PHASE=ACTIVE_IMPORT_GRAPH
+echo "PHASE=$CURRENT_PHASE"
 python3 - <<'PY'
 import json, os, re
 from pathlib import Path
@@ -66,3 +122,5 @@ out=Path(os.environ['WORK'])/'runtime-evidence/runtime-discovery-receipt.json'
 out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
 (out.parent/'active-import-graph.txt').write_text(joined+'\n')
 PY
+CURRENT_PHASE=COMPLETE
+echo "PHASE=$CURRENT_PHASE"
