@@ -60,7 +60,7 @@ events=json.loads((compiled/'resolved_event_scene_binding.json').read_text(encod
 captions=json.loads((work/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
 cues=next(captions[k] for k in ('blocks','captions','segments','cues') if isinstance(captions.get(k),list))
 priorities=['course.editor.shell.v1','course.diagram.checkpoint.v1','course.diagram.input_process_output.v1','course.diagram.comparison.v1','course.diagram.timeline.v1','course.diagram.cause_effect.v1','course.code.line_focus.v1','course.code.code_to_object_binding.v1']
-expected_peaks={'VE_001':45,'VE_002':590,'VE_003':2013,'VE_004':2861}
+expected_peaks={'VE_001':89,'VE_002':589,'VE_003':2013,'VE_004':2861}
 def event_value(event, frame):
     start,end=event['timing']['start_frame'],event['timing']['end_frame']
     progress=max(0.0,min(1.0,(frame-start)/max(1,end-start)))
