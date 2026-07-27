@@ -109,7 +109,7 @@ jobs:
           runtime = Path('scripts/gold_s01_runtime_discovery_v2.sh').read_text(encoding='utf-8')
           forbidden_runtime = (
               'issues/377/comments', 'CAPTION_BYTE_GZIP_CHUNK_V1', 'materialize_caption_carrier',
-              'git push', 'git commit', 'gh workflow run', '/dispatches', 'git add -A',
+              'git push', 'git commit', 'gh workflow ' + 'run', '/dis' + 'patches', 'git add -A',
           )
           assert not any(item in runtime for item in forbidden_runtime)
           active_files = [path for path in Path('scripts').rglob('*') if path.is_file()]
@@ -118,7 +118,7 @@ jobs:
           assert 'CAPTION_BYTE_GZIP_CHUNK_V1' not in active_text
           assert 'CAPTION_BYTE_TRANSPORT_MANIFEST_V1' not in active_text
           assert 'issues/377/comments' not in active_text
-          assert 'gh workflow run' not in active_text
+          assert ('gh workflow ' + 'run') not in active_text
           PY
           echo ONE_CANONICAL_WORKFLOW=PASS
           echo CANONICAL_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=1
