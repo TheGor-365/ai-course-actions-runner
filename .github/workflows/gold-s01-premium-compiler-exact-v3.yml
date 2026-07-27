@@ -2,13 +2,10 @@ name: Gold S01 Premium Compiler Exact v3
 
 on:
   push:
-    branches:
-      - worker/m1-l01-s01-runner-pre-render-finalization-v1
-    paths:
-      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+    branches: [worker/m1-l01-s01-runner-pre-render-finalization-v1]
+    paths: ['.github/workflows/gold-s01-premium-compiler-exact-v3.yml']
   pull_request:
-    paths:
-      - '.github/workflows/gold-s01-premium-compiler-exact-v3.yml'
+    paths: ['.github/workflows/gold-s01-premium-compiler-exact-v3.yml']
   workflow_dispatch:
 
 permissions:
@@ -20,7 +17,7 @@ env:
   SOURCE_HEAD: 4cfc9acd1509408f86c8b3a788779173395bbb2f
   PRODUCTION_REPO: TheGor-365/ai-course-production-system
   PRODUCTION_BRANCH: worker/m1-l01-s01-premium-production-finalization-v1
-  PRODUCTION_HEAD: 8143afd662f020e0e3b79068eca9e7bcd3b5e45c
+  PRODUCTION_HEAD: 9b1eeec495bfbd6fa712d5bb1d1b00f4622b5556
   PACKAGE_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
   ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
 
@@ -45,8 +42,7 @@ jobs:
             repo="$1" branch="$2" expected="$3" directory="$4"
             git init -q "$directory"
             git -C "$directory" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
-            remote_head=$(git -C "$directory" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')
-            test "$remote_head" = "$expected"
+            test "$(git -C "$directory" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')" = "$expected"
             git -C "$directory" fetch -q --depth=1 origin "$expected"
             git -C "$directory" checkout -q --detach "$expected"
             git -C "$directory" remote set-url origin "https://github.com/${repo}.git"
@@ -56,17 +52,18 @@ jobs:
           clone_exact "$SOURCE_REPO" "$SOURCE_BRANCH" "$SOURCE_HEAD" source
           clone_exact "$PRODUCTION_REPO" "$PRODUCTION_BRANCH" "$PRODUCTION_HEAD" production
 
-      - name: 03_verify_compiler_segment_identity_and_syntax
+      - name: 03_verify_compiler_identity_and_syntax
         run: |
           set -euo pipefail
-          compiler_root=production/11_tools/render_factory/gold_s01_visual_v2
-          echo '55aa906d7f04a6ada7a75fbeee85bd685ebc88cb0cd5b6904a5a404effe0df00  premium_scene_compiler_exact_v3.part1.py' > /tmp/compiler-parts.sha256
-          echo '3b0bd8134dca4e3e3f661ca088cc4e53a55872c3498cf6c2a1ce889a4f565b66  premium_scene_compiler_exact_v3.part2.py' >> /tmp/compiler-parts.sha256
-          echo '0b7b16c209c9a4e37b757e7bda2286963e33c578b3580e2273922658577544a2  premium_scene_compiler_exact_v3.part3.py' >> /tmp/compiler-parts.sha256
-          (cd "$compiler_root/exact_v3" && sha256sum -c /tmp/compiler-parts.sha256)
-          cat "$compiler_root"/exact_v3/premium_scene_compiler_exact_v3.part{1,2,3}.py > /tmp/premium_scene_compiler_exact_v3.py
-          test "$(sha256sum /tmp/premium_scene_compiler_exact_v3.py | awk '{print $1}')" = '2f7cddec37054ca0d898c178a96d5b3d4859600e7757abaaf77924000abdf6af'
-          python3 -m py_compile "$compiler_root/premium_scene_compiler_exact_v3.py" "$compiler_root/premium_scene_compiler_v2.py" /tmp/premium_scene_compiler_exact_v3.py
+          root=production/11_tools/render_factory/gold_s01_visual_v2
+          printf '%s  %s\n' \
+            55aa906d7f04a6ada7a75fbeee85bd685ebc88cb0cd5b6904a5a404effe0df00 premium_scene_compiler_exact_v3.part1.py \
+            3b0bd8134dca4e3e3f661ca088cc4e53a55872c3498cf6c2a1ce889a4f565b66 premium_scene_compiler_exact_v3.part2.py \
+            0b7b16c209c9a4e37b757e7bda2286963e33c578b3580e2273922658577544a2 premium_scene_compiler_exact_v3.part3.py > /tmp/parts.sha256
+          (cd "$root/exact_v3" && sha256sum -c /tmp/parts.sha256)
+          cat "$root"/exact_v3/premium_scene_compiler_exact_v3.part{1,2,3}.py > /tmp/compiler.py
+          test "$(sha256sum /tmp/compiler.py | awk '{print $1}')" = 2f7cddec37054ca0d898c178a96d5b3d4859600e7757abaaf77924000abdf6af
+          python3 -m py_compile "$root/premium_scene_compiler_exact_v3.py" "$root/premium_scene_compiler_v2.py" /tmp/compiler.py
 
       - name: 04_run_actual_exact_source_v2_compiler
         id: compiler
@@ -85,29 +82,19 @@ jobs:
           timing="$module/timing_binding_v1.json"
           set +e
           python3 "$compiler" \
-            --source-dir source \
-            --production-dir production \
-            --source-repo "$SOURCE_REPO" \
-            --source-branch "$SOURCE_BRANCH" \
-            --source-sha "$SOURCE_HEAD" \
+            --source-dir source --production-dir production \
+            --source-repo "$SOURCE_REPO" --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_HEAD" \
             --package-root "$PACKAGE_ROOT" \
-            --mandatory-visual-minimum-file "$mandatory" \
-            --mandatory-visual-minimum-sha256 "$(sha256sum "$mandatory" | awk '{print $1}')" \
-            --premium-shot-specs-file "$specs" \
-            --premium-shot-specs-sha256 "$(sha256sum "$specs" | awk '{print $1}')" \
-            --shared-id-registry-file "$registry" \
-            --shared-id-registry-sha256 "$(sha256sum "$registry" | awk '{print $1}')" \
-            --timeline-file "$timing" \
-            --accepted-timing-sha256 "$ACCEPTED_TIMING_SHA256" \
-            --asset-registry-file "$assets" \
-            --asset-registry-sha256 "$(sha256sum "$assets" | awk '{print $1}')" \
-            --output-dir compiler-output \
-            > compiler-output/compiler.log 2>&1
+            --mandatory-visual-minimum-file "$mandatory" --mandatory-visual-minimum-sha256 "$(sha256sum "$mandatory" | awk '{print $1}')" \
+            --premium-shot-specs-file "$specs" --premium-shot-specs-sha256 "$(sha256sum "$specs" | awk '{print $1}')" \
+            --shared-id-registry-file "$registry" --shared-id-registry-sha256 "$(sha256sum "$registry" | awk '{print $1}')" \
+            --timeline-file "$timing" --accepted-timing-sha256 "$ACCEPTED_TIMING_SHA256" \
+            --asset-registry-file "$assets" --asset-registry-sha256 "$(sha256sum "$assets" | awk '{print $1}')" \
+            --output-dir compiler-output > compiler-output/compiler.log 2>&1
           code=$?
           set -e
           cat compiler-output/compiler.log
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
 
       - name: 05_upload_compiler_diagnostics
         if: always()
@@ -130,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json
+          import hashlib, json, os
           from pathlib import Path
           root=Path('compiler-output')
           receipt=json.loads((root/'premium_compiler_receipt.json').read_text())
@@ -140,21 +127,16 @@ jobs:
           assets=json.loads((root/'resolved_asset_materialization_plan.json').read_text())
           shared=json.loads((root/'resolved_shared_ID_binding.json').read_text())
           assert receipt['PREMIUM_COMPILER_ACTUAL_S01_RUN']=='PASS'
-          assert receipt['exact_source_head']=='4cfc9acd1509408f86c8b3a788779173395bbb2f'
-          assert receipt['shot_ir_count']==26 and shot['record_count']==26
-          assert receipt['scene_ir_count']==26 and scene['record_count']==26
-          assert receipt['source_visual_event_count']==24 and events['record_count']==24
-          assert receipt['unbound_event_count']==0 and events['unbound_event_count']==0
-          assert receipt['unknown_shared_id_count']==0 and shared['unknown_shared_ID_count']==0
-          assert receipt['missing_premium_field_count']==0
-          assert receipt['handwritten_unbound_sceneir_count']==0
-          assert receipt['generic_card_substitution_count']==0
-          assert receipt['required_asset_plan_empty_count']==0
-          assert assets['required_asset_count']==18
-          assert assets['adapted_asset_count']==18
-          assert assets['executable_export_proven_count']==18
-          assert assets['missing_asset_count']==0
-          assert assets['placeholder_asset_hash_count']==0
+          assert receipt['exact_source_head']==os.environ['SOURCE_HEAD']
+          assert receipt['shot_ir_count']==shot['record_count']==26
+          assert receipt['scene_ir_count']==scene['record_count']==26
+          assert receipt['source_visual_event_count']==events['record_count']==24
+          assert receipt['unbound_event_count']==events['unbound_event_count']==0
+          assert receipt['unknown_shared_id_count']==shared['unknown_shared_ID_count']==0
+          for key in ('missing_premium_field_count','handwritten_unbound_sceneir_count','generic_card_substitution_count','required_asset_plan_empty_count'):
+              assert receipt[key]==0
+          assert assets['required_asset_count']==assets['adapted_asset_count']==assets['executable_export_proven_count']==18
+          assert assets['missing_asset_count']==assets['placeholder_asset_hash_count']==0
           assert assets['asset_scene_consumption_coverage']=='100_PERCENT'
           assert receipt['asset_provenance_coverage']=='100_PERCENT'
           assert receipt['media_render_started'] is False
@@ -162,22 +144,7 @@ jobs:
           for line in (root/'compiler_output_sha256sums.txt').read_text().splitlines():
               digest,name=line.split('  ',1); sums[name]=digest
               assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
-          material={
-            'schema_version':'premium_compiler_remote_receipt.v1',
-            'result':'PASS',
-            'source_head':receipt['exact_source_head'],
-            'production_head':'8143afd662f020e0e3b79068eca9e7bcd3b5e45c',
-            'compiler_receipt_sha256':sums['premium_compiler_receipt.json'],
-            'shot_ir_sha256':sums['resolved_premium_shot_ir.json'],
-            'scene_ir_sha256':sums['resolved_premium_scene_ir.json'],
-            'asset_manifest_sha256':sums['resolved_asset_materialization_plan.json'],
-            'event_binding_sha256':sums['resolved_event_scene_binding.json'],
-            'shared_ID_binding_sha256':sums['resolved_shared_ID_binding.json'],
-            'media_render_started':False,
-            'two_minute_render_authorized':False,
-            'full_15_minute_render_authorized':False,
-            'no_fake_green':True,
-          }
+          material={'schema_version':'premium_compiler_remote_receipt.v1','result':'PASS','source_head':receipt['exact_source_head'],'production_head':os.environ['PRODUCTION_HEAD'],'compiler_receipt_sha256':sums['premium_compiler_receipt.json'],'shot_ir_sha256':sums['resolved_premium_shot_ir.json'],'scene_ir_sha256':sums['resolved_premium_scene_ir.json'],'asset_manifest_sha256':sums['resolved_asset_materialization_plan.json'],'event_binding_sha256':sums['resolved_event_scene_binding.json'],'shared_ID_binding_sha256':sums['resolved_shared_ID_binding.json'],'media_render_started':False,'two_minute_render_authorized':False,'full_15_minute_render_authorized':False,'no_fake_green':True}
           raw=json.dumps(material,sort_keys=True,separators=(',',':'))+'\n'
           (root/'premium-compiler-remote-receipt.json').write_text(raw)
           print(raw)
@@ -195,7 +162,6 @@ jobs:
       - name: 09_stop_before_media_render
         if: steps.compiler.outputs.exit_code == '0'
         run: |
-          set -euo pipefail
           echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=PASS'
           echo 'SHOT_IR_COUNT=26'
           echo 'SCENE_IR_COUNT=26'
