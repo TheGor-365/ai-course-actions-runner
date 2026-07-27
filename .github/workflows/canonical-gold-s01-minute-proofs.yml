@@ -160,13 +160,15 @@ jobs:
           echo MEDIA_JOB_REACHABLE=false
 
   runtime-discovery:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'runtime_discovery') || github.event_name == 'push' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'runtime_discovery') || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: static-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ inputs.runner_head || github.sha }}", persist-credentials: false}
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (inputs.runner_head || github.sha) }}
+          persist-credentials: false
       - name: 02_execute_exact_runtime_discovery
         env:
           PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
