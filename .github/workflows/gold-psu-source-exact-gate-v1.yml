@@ -19,7 +19,7 @@ permissions:
 env:
   SOURCE_REPO: TheGor-365/ai-course-source-library
   SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-final-exact-repair-v1
-  SOURCE_HEAD: acb45e07e7dbdda8a9595f7b426b7a9f0667ce4f
+  SOURCE_HEAD: 4cfc9acd1509408f86c8b3a788779173395bbb2f
   PRODUCTION_REPO: TheGor-365/ai-course-production-system
   PRODUCTION_BRANCH: coord/gold-psu-finalization-v36-v1
   PRODUCTION_HEAD: 3fcb7bc68d397da2004ade7251aa5cba791f156f
@@ -33,7 +33,7 @@ env:
 jobs:
   exact-source-gate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: 01_checkout_exact_runner_head
         uses: actions/checkout@v4
@@ -77,9 +77,10 @@ jobs:
       - name: 04_run_source_finalization_and_OC_lineage_validators
         run: |
           set -euo pipefail
-          mkdir -p receipts
+          mkdir -p receipts/reference-compiler
           python3 -m py_compile "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py"
           python3 -m py_compile "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_final_exact_oc_lineage_v1.py"
+          python3 -m py_compile "source/${PSU_ROOT}/10_pipeline/compile_gold_psu_reference_v1.py"
           python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py" \
             --root source --negative-fixtures --receipt receipts/source-finalization-receipt.json
           python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_final_exact_oc_lineage_v1.py" \
@@ -99,7 +100,37 @@ jobs:
           print('SOURCE_FINALIZATION_AND_OC_LINEAGE=PASS')
           PY
 
-      - name: 05_verify_content_addressed_closure
+      - name: 05_run_canonical_reference_compiler
+        run: |
+          set -euo pipefail
+          python3 "source/${PSU_ROOT}/10_pipeline/compile_gold_psu_reference_v1.py" \
+            --repo source \
+            --source-repo "$SOURCE_REPO" \
+            --source-branch "$SOURCE_BRANCH" \
+            --source-sha "$SOURCE_HEAD" \
+            --package-root "$PSU_ROOT" \
+            --output-dir receipts/reference-compiler \
+            | tee receipts/reference-compiler/stdout.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('receipts/reference-compiler')
+          closure = json.loads((root / 'psu_closure_receipt.json').read_text(encoding='utf-8'))
+          events = json.loads((root / 'executable_event_graph.json').read_text(encoding='utf-8'))
+          shots = json.loads((root / 'resolved_shot_ir.json').read_text(encoding='utf-8'))
+          scenes = json.loads((root / 'resolved_scene_ir.json').read_text(encoding='utf-8'))
+          assert closure['record_count'] == 105
+          assert closure['unclassified_file_count'] == 0
+          assert closure['missing_required_file_count'] == 0
+          assert events['source_visual_event_count'] == 24
+          assert events['unmapped_visual_event_count'] == 0
+          assert shots['record_count'] == 26
+          assert scenes['record_count'] == 26
+          assert scenes['handwritten_unbound_sceneir_count'] == 0
+          print('CANONICAL_REFERENCE_COMPILE=PASS')
+          PY
+
+      - name: 06_verify_content_addressed_closure
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -126,7 +157,7 @@ jobs:
           print('CONTENT_ADDRESSED_CLOSURE=PASS')
           PY
 
-      - name: 06_binary_and_media_leakage_gate
+      - name: 07_binary_and_media_leakage_gate
         run: |
           set -euo pipefail
           forbidden=$(find "source/${PSU_ROOT}" "source/План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY" -type f \
@@ -134,7 +165,7 @@ jobs:
           test -z "$forbidden"
           echo 'BINARY_MEDIA_LEAKAGE=0'
 
-      - name: 07_materialize_sanitized_exact_source_receipt
+      - name: 08_materialize_sanitized_exact_source_receipt
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -146,6 +177,7 @@ jobs:
           source = Path('source')
           psu = source / Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2')
           library = source / Path('План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY')
+          reference = Path('receipts/reference-compiler')
           sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
           blob = lambda rel: subprocess.check_output(['git','-C','source','rev-parse',f'HEAD:{rel.as_posix()}'], text=True).strip()
           closure = psu / 'GOLD_PSU_CLOSURE_SHA256SUMS.txt'
@@ -154,8 +186,9 @@ jobs:
           specs_rel = Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2/GOLD_PSU_S01_PREMIUM_SHOT_SPECS_v2.json')
           finalization = json.load(open('receipts/source-finalization-receipt.json', encoding='utf-8'))
           lineage = json.load(open('receipts/source-oc-lineage-receipt.json', encoding='utf-8'))
+          reference_closure = json.load(open(reference / 'psu_closure_receipt.json', encoding='utf-8'))
           receipt = {
-            'schema_version':'gold_psu_source_exact_gate_receipt.v3',
+            'schema_version':'gold_psu_source_exact_gate_receipt.v4',
             'result':'PASS',
             'source_repository':os.environ['SOURCE_REPO'],
             'source_branch':os.environ['SOURCE_BRANCH'],
@@ -166,6 +199,9 @@ jobs:
             'oc_document_id':'FACTORY_OPERATION_CENTER_v36',
             'oc_blob_sha':os.environ['OC_BLOB_SHA'],
             'psu_closure_sha256':sha(closure),
+            'reference_compiler_closure_sha256':reference_closure['psu_closure_sha256'],
+            'reference_compiler_record_count':reference_closure['record_count'],
+            'reference_compiler_result':'PASS',
             'canonical_manifest_blob':blob(manifest_rel),
             'canonical_manifest_sha256':sha(source / manifest_rel),
             'shared_id_registry_blob':blob(registry_rel),
@@ -184,12 +220,12 @@ jobs:
             'no_fake_green':True,
           }
           raw = json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n'
-          Path('receipts/gold-psu-source-exact-gate-receipt-v3.json').write_text(raw, encoding='utf-8')
-          Path('receipts/SHA256SUMS').write_text(f"{hashlib.sha256(raw.encode()).hexdigest()}  gold-psu-source-exact-gate-receipt-v3.json\n", encoding='utf-8')
+          Path('receipts/gold-psu-source-exact-gate-receipt-v4.json').write_text(raw, encoding='utf-8')
+          Path('receipts/SHA256SUMS').write_text(f"{hashlib.sha256(raw.encode()).hexdigest()}  gold-psu-source-exact-gate-receipt-v4.json\n", encoding='utf-8')
           print(raw)
           PY
 
-      - name: 08_upload_exact_source_receipt
+      - name: 09_upload_exact_source_receipt
         uses: actions/upload-artifact@v4
         with:
           name: gold-psu-source-exact-gate-${{ env.SOURCE_HEAD }}
@@ -197,10 +233,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 09_stop_before_media_render
+      - name: 10_stop_before_media_render
         run: |
           set -euo pipefail
           echo 'SOURCE_REMOTE_EXACT_GATE_GREEN=true'
+          echo 'REFERENCE_COMPILER=PASS'
           echo 'MEDIA_RENDER_STARTED=false'
           echo 'TWO_MINUTE_RENDER_AUTHORIZED=false'
           echo 'FULL_15_MINUTE_RENDER_AUTHORIZED=false'
