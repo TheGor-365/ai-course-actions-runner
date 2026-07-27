@@ -151,7 +151,7 @@ jobs:
           PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head || '6b39180c82c8274ede6130dd72a9e84d0ffe39e1' }}
           COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id || '8652825560' }}
           COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 || 'ea5476005645c3dbb4cc7e73e002dc1cb2f6d7b64a546104c3b0012b0fef7785' }}
-        run: scripts/gold_s01_runtime_discovery_v2.sh
+        run: bash scripts/gold_s01_runtime_discovery_v2.sh
       - name: 03_upload_runtime_discovery_evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -176,7 +176,7 @@ jobs:
           CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
           ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
           CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
-        run: scripts/gold_s01_caption_packaging_v2.sh prepare
+        run: bash scripts/gold_s01_caption_packaging_v2.sh prepare
       - name: 03_upload_public_caption_artifact
         id: upload
         uses: actions/upload-artifact@v4
@@ -192,7 +192,7 @@ jobs:
           CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
           ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
           CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
-        run: scripts/gold_s01_caption_packaging_v2.sh verify-download
+        run: bash scripts/gold_s01_caption_packaging_v2.sh verify-download
       - uses: actions/upload-artifact@v4
         with:
           name: gold-s01-caption-identity-${{ inputs.caption_carrier_head }}
@@ -225,7 +225,7 @@ jobs:
           CAPTION_ARTIFACT_SHA256: ${{ inputs.caption_artifact_sha256 }}
           CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
           ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
-        run: scripts/gold_s01_component_evidence_v2.sh
+        run: bash scripts/gold_s01_component_evidence_v2.sh
       - uses: actions/upload-artifact@v4
         with:
           name: gold-s01-component-evidence-${{ inputs.production_runtime_head }}
@@ -247,7 +247,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           AUTHORITY_MANIFEST_PATH: ${{ inputs.authority_manifest_path }}
           RUNNER_HEAD: ${{ inputs.runner_head }}
-        run: scripts/gold_s01_pre_render_only_v2.sh
+        run: bash scripts/gold_s01_pre_render_only_v2.sh
       - name: 03_upload_sanitized_pre_render_receipt
         id: upload
         uses: actions/upload-artifact@v4
