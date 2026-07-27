@@ -147,7 +147,7 @@ jobs:
           PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
           GH_TOKEN: ${{ github.token }}
           PRODUCTION_BRANCH: ${{ inputs.production_branch || 'worker/m1-l01-s01-premium-production-finalization-v1' }}
-          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head || '8344fedf3bb82601e20eaf8eb831bff3ecc80bfa' }}
+          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head || 'b31e647053a4cd3733da715e81b967236874b2e0' }}
           PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head || '6b39180c82c8274ede6130dd72a9e84d0ffe39e1' }}
           COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id || '8652825560' }}
           COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 || 'ea5476005645c3dbb4cc7e73e002dc1cb2f6d7b64a546104c3b0012b0fef7785' }}
@@ -156,7 +156,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head || '8344fedf3bb82601e20eaf8eb831bff3ecc80bfa' }}
+          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head || 'b31e647053a4cd3733da715e81b967236874b2e0' }}
           path: work/runtime-evidence
           if-no-files-found: error
           retention-days: 30
