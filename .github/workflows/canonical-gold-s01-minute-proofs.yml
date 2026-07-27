@@ -77,9 +77,16 @@ jobs:
       - name: 03_assert_single_triggering_workflow
         run: |
           set -euo pipefail
-          count=$(grep -RIl --include='*.yml' --include='*.yaml' -E '^  workflow_dispatch:|^workflow_dispatch:' .github/workflows | wc -l)
-          test "$count" = 1
-          test -f .github/workflows/canonical-gold-s01-minute-proofs.yml
+          canonical=.github/workflows/canonical-gold-s01-minute-proofs.yml
+          test -f "$canonical"
+          dispatch_count=$(grep -Ec '^  workflow_dispatch:|^workflow_dispatch:' "$canonical")
+          legacy_count=$(find .github/workflows -maxdepth 1 -type f \
+            \( -iname '*gold*s01*.yml' -o -iname '*gold*s01*.yaml' -o -iname '*s01*gold*.yml' -o -iname '*s01*gold*.yaml' \) \
+            ! -name 'canonical-gold-s01-minute-proofs.yml' | wc -l)
+          echo "CANONICAL_WORKFLOW_DISPATCH_COUNT=$dispatch_count"
+          echo "DUPLICATE_GOLD_S01_WORKFLOW_COUNT=$legacy_count"
+          test "$dispatch_count" = 1
+          test "$legacy_count" = 0
 
   caption-packaging:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'caption_packaging' }}
