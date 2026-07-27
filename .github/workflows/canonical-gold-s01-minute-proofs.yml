@@ -1,0 +1,326 @@
+name: Canonical Gold S01 Runtime Captions and Pre-render
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Explicit controlled no-media mode
+        required: true
+        type: choice
+        options: [static_contract, runtime_discovery, caption_packaging, component_evidence, pre_render_only]
+        default: static_contract
+      runner_branch: {description: Exact runner branch, required: true, type: string}
+      runner_head: {description: Exact frozen runner branch head, required: true, type: string}
+      production_branch: {description: Exact production runtime branch, required: false, type: string}
+      production_runtime_head: {description: Exact production runtime head, required: false, type: string}
+      production_compile_head: {description: Immutable compiler input head, required: false, type: string}
+      compiler_artifact_id: {description: Exact compiler artifact ID, required: false, type: string}
+      compiler_artifact_sha256: {description: Exact compiler artifact archive SHA-256, required: false, type: string}
+      caption_carrier_branch: {description: Exact caption carrier branch, required: false, type: string}
+      caption_carrier_head: {description: Exact caption carrier head, required: false, type: string}
+      accepted_audio_head:
+        description: Accepted audio execution head
+        required: false
+        type: string
+        default: 755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4
+      caption_vtt_sha256: {description: Exact accepted VTT SHA-256, required: false, type: string}
+      caption_artifact_id: {description: Exact caption artifact ID, required: false, type: string}
+      caption_artifact_sha256: {description: Exact caption artifact archive SHA-256, required: false, type: string}
+      authority_manifest_path:
+        description: Immutable pre-render manifest path
+        required: false
+        type: string
+        default: config/GOLD_S01_PRE_RENDER_MANIFEST_v2.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: canonical-gold-s01-${{ inputs.runner_head }}-${{ inputs.mode }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: TheGor-365/ai-course-source-library
+  PRODUCTION_REPO: TheGor-365/ai-course-production-system
+  REMOTION_ROOT: 11_tools/render_factory/remotion
+  PREMIUM_ENTRYPOINT: src/goldS01VisualV2/PremiumRootV3.tsx
+  COMPOSITION_ID: GoldS01PremiumFirst120s
+  ACCEPTED_TIMING_SHA256: 716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61
+  ACCEPTED_CAPTION_JSON_SHA256: 5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18
+  A3483_SHA256: 74d9a9008b594bd8bd18f001d05542e249bd9af371c32e87181a0df42064f352
+  WORK: ${{ github.workspace }}/work
+
+jobs:
+  static-contract:
+    if: ${{ inputs.mode == 'static_contract' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test -n "$RUNNER_BRANCH"
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+          echo EXACT_RUNNER_HEAD=PASS
+      - name: 03_compile_and_test_contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/gold_s01_canonical_pre_render_v2.py tests/test_gold_s01_canonical_pre_render_v2.py
+          bash -n scripts/gold_s01_runtime_discovery_v2.sh scripts/gold_s01_caption_packaging_v2.sh scripts/gold_s01_component_evidence_v2.sh scripts/gold_s01_pre_render_only_v2.sh
+          python3 -m unittest tests.test_gold_s01_canonical_pre_render_v2 -v
+      - name: 04_assert_explicit_single_workflow_and_zero_hidden_authority
+        run: |
+          set -euo pipefail
+          canonical=.github/workflows/canonical-gold-s01-minute-proofs.yml
+          test -f "$canonical"
+          duplicates=$(find .github/workflows -maxdepth 1 -type f \( -iname '*gold*s01*.yml' -o -iname '*gold*s01*.yaml' -o -iname '*s01*gold*.yml' -o -iname '*s01*gold*.yaml' \) ! -name 'canonical-gold-s01-minute-proofs.yml' -print)
+          test -z "$duplicates"
+          for path in \
+            scripts/sitecustomize.py scripts/sitecustomize \
+            scripts/usercustomize.py scripts/usercustomize \
+            scripts/zipfile.py scripts/zipfile \
+            .github/workflows/materialize-caption-carrier-bridge.yml \
+            scripts/materialize_caption_carrier_bridge_v1.py \
+            scripts/final_pipeline_orchestrator_v2.py scripts/final_pipeline_orchestrator_v2 \
+            scripts/quality_pre_render_closure_v1.py scripts/quality_pre_render_closure_v1; do
+            test ! -e "$path"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/canonical-gold-s01-minute-proofs.yml').read_text(encoding='utf-8')
+          assert workflow.count('workflow_' + 'dispatch:') == 1
+          assert '\n  push:' not in workflow and '\n  pull_request:' not in workflow
+          assert '\n    needs:' not in workflow
+          assert ('gh workflow ' + 'run') not in workflow
+          assert ('/dis' + 'patches') not in workflow
+          forbidden_media = ('remotion ' + 'render', '.' + 'mp4', 'execute_' + 'media', 'canonical-minute-proofs-' + 'media-held')
+          assert not any(item in workflow for item in forbidden_media)
+          runtime = Path('scripts/gold_s01_runtime_discovery_v2.sh').read_text(encoding='utf-8')
+          forbidden_runtime = (
+              'issues/377/comments', 'CAPTION_BYTE_GZIP_CHUNK_V1', 'materialize_caption_carrier',
+              'git push', 'git commit', 'gh workflow ' + 'run', '/dis' + 'patches', 'git add -A',
+          )
+          assert not any(item in runtime for item in forbidden_runtime)
+          active_files = [path for path in Path('scripts').rglob('*') if path.is_file()]
+          active_text = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in active_files)
+          assert 'atexit.register' not in active_text
+          assert 'CAPTION_BYTE_GZIP_CHUNK_V1' not in active_text
+          assert 'CAPTION_BYTE_TRANSPORT_MANIFEST_V1' not in active_text
+          assert 'issues/377/comments' not in active_text
+          assert ('gh workflow ' + 'run') not in active_text
+          PY
+          echo ONE_CANONICAL_WORKFLOW=PASS
+          echo CANONICAL_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=1
+          echo HIDDEN_PYTHON_HOOK_COUNT=0
+          echo PYTHON_AUTO_IMPORT_ORCHESTRATION_COUNT=0
+          echo ATEXIT_WORKFLOW_DISPATCH_COUNT=0
+          echo STDLIB_SHADOW_COUNT=0
+          echo STDLIB_SHADOW_MODULE_COUNT=0
+          echo IMPLICIT_CROSS_REPO_WRITE_COUNT=0
+          echo IMPLICIT_WORKFLOW_DISPATCH_COUNT=0
+          echo AUTO_DISPATCH_FROM_PYTHON_COUNT=0
+          echo ACTIVE_COMMENT_CAPTION_TRANSPORT_COUNT=0
+          echo ACTIVE_BASE64_CHUNK_RECONSTRUCTION_COUNT=0
+          echo ACTIVE_TEMP_CAPTION_WORKFLOW_COUNT=0
+          echo COMMENT_CAPTION_TRANSPORT_COUNT=0
+          echo IMPLICIT_MODE_CHAIN_COUNT=0
+          echo MEDIA_JOB_REACHABLE=false
+
+  runtime-discovery:
+    if: ${{ inputs.mode == 'runtime_discovery' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+      - name: 03_execute_exact_runtime_discovery
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_BRANCH: ${{ inputs.production_branch }}
+          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head }}
+          PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head }}
+          COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id }}
+          COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 }}
+        run: bash scripts/gold_s01_runtime_discovery_v2.sh
+      - name: 04_upload_runtime_discovery_evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head }}
+          path: work/runtime-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  caption-packaging:
+    if: ${{ inputs.mode == 'caption_packaging' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+      - name: 03_verify_and_stage_caption_carrier
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          CAPTION_CARRIER_BRANCH: ${{ inputs.caption_carrier_branch }}
+          CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+        run: bash scripts/gold_s01_caption_packaging_v2.sh prepare
+      - name: 04_upload_public_caption_artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-accepted-ru-captions-v1-${{ env.ACCEPTED_TIMING_SHA256 }}
+          path: ${{ env.WORK }}/caption-pack
+          if-no-files-found: error
+          retention-days: 90
+      - name: 05_redownload_and_verify_caption_identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAPTION_ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          CAPTION_CARRIER_HEAD: ${{ inputs.caption_carrier_head }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+        run: bash scripts/gold_s01_caption_packaging_v2.sh verify-download
+      - name: 06_upload_caption_identity_receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-caption-identity-${{ inputs.caption_carrier_head }}
+          path: |
+            ${{ env.WORK }}/caption-input-receipt.json
+            ${{ env.WORK }}/caption-stage-receipt.json
+            ${{ env.WORK }}/caption-download-receipt.json
+            ${{ env.WORK }}/caption-public-artifact-receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  component-evidence:
+    if: ${{ inputs.mode == 'component_evidence' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+      - name: 03_render_bounded_stills_and_validate_component_evidence
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_BRANCH: ${{ inputs.production_branch }}
+          PRODUCTION_RUNTIME_HEAD: ${{ inputs.production_runtime_head }}
+          PRODUCTION_COMPILE_HEAD: ${{ inputs.production_compile_head }}
+          COMPILER_ARTIFACT_ID: ${{ inputs.compiler_artifact_id }}
+          COMPILER_ARTIFACT_SHA256: ${{ inputs.compiler_artifact_sha256 }}
+          CAPTION_ARTIFACT_ID: ${{ inputs.caption_artifact_id }}
+          CAPTION_ARTIFACT_SHA256: ${{ inputs.caption_artifact_sha256 }}
+          CAPTION_VTT_SHA256: ${{ inputs.caption_vtt_sha256 }}
+          ACCEPTED_AUDIO_HEAD: ${{ inputs.accepted_audio_head }}
+        run: bash scripts/gold_s01_component_evidence_v2.sh
+      - name: 04_upload_component_evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-component-evidence-${{ inputs.production_runtime_head }}
+          path: ${{ env.WORK }}/component-evidence
+          if-no-files-found: error
+          retention-days: 90
+
+  pre-render-only:
+    if: ${{ inputs.mode == 'pre_render_only' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+      - name: 03_execute_exact_pre_render_without_media
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ github.token }}
+          AUTHORITY_MANIFEST_PATH: ${{ inputs.authority_manifest_path }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: bash scripts/gold_s01_pre_render_only_v2.sh
+      - name: 04_upload_sanitized_pre_render_receipt
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-pre-render-receipt-${{ github.run_id }}
+          path: ${{ env.WORK }}/pre-render-artifact
+          if-no-files-found: error
+          retention-days: 90
+      - name: 05_redownload_identity_and_stop_before_media
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${{ steps.upload.outputs.artifact-id }}/zip" > "$WORK/pre-render.zip"
+          mkdir -p "$WORK/pre-render-redownload"
+          unzip -q "$WORK/pre-render.zip" -d "$WORK/pre-render-redownload"
+          (cd "$WORK/pre-render-redownload" && sha256sum -c SHA256SUMS)
+          test "$(python3 -c 'import json;print(str(json.load(open("'"$WORK/pre-render-redownload/pre-render-receipt.json"'"))["media_render_started"]).lower())')" = false
+          echo PUBLIC_PRE_RENDER_GREEN=true
+          echo REAL_JOB_STEPS_AVAILABLE=true
+          echo MEDIA_RENDER_STARTED=false
+          echo TWO_MINUTE_RENDER_AUTHORIZED=false
+          echo FULL_15_MINUTE_RENDER_AUTHORIZED=false
