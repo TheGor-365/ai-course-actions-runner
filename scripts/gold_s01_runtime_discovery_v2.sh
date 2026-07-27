@@ -27,6 +27,38 @@ trap on_exit EXIT
 : "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${GH_TOKEN:?}"
 for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD"; do test "${#value}" = 40; done
 
+if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+  CURRENT_PHASE=MATERIALIZE_ACCEPTED_CAPTION_CARRIER
+  echo "PHASE=$CURRENT_PHASE"
+  carrier_branch=evidence/m1-l01-s01-accepted-captions-v1
+  carrier_staging_head=6d121d7a81a562d38f5d8a60a5bac1cfd1521e3f
+  accepted_audio_head=755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4
+  carrier_dir="$WORK/carrier-bridge"
+  rm -rf "$carrier_dir"
+  git clone --quiet --single-branch --branch "$carrier_branch" \
+    "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git" "$carrier_dir"
+  test "$(git -C "$carrier_dir" rev-parse HEAD)" = "$carrier_staging_head"
+  test "$(git -C "$carrier_dir" rev-parse HEAD^)" = "$accepted_audio_head"
+  GH_TOKEN="$PRIVATE_REPO_PAT" gh api \
+    "repos/${PRODUCTION_REPO}/issues/377/comments?per_page=100" \
+    > "$carrier_dir/comments.json"
+  python3 scripts/materialize_caption_carrier_bridge_v1.py \
+    --comments "$carrier_dir/comments.json" \
+    --output "$carrier_dir/sanitized_timing_handoff_v01"
+  rm -f \
+    "$carrier_dir/comments.json" \
+    "$carrier_dir/.github/workflows/materialize-accepted-caption-carrier.yml"
+  git -C "$carrier_dir" config user.name "github-actions[bot]"
+  git -C "$carrier_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  git -C "$carrier_dir" add -A
+  test "$(git -C "$carrier_dir" diff --cached --name-only | sort | tr '\n' ' ')" = ".github/workflows/materialize-accepted-caption-carrier.yml sanitized_timing_handoff_v01/SHA256SUMS sanitized_timing_handoff_v01/caption_recovery_receipt.json sanitized_timing_handoff_v01/s01_ru_accepted_timing_contract_v01.json sanitized_timing_handoff_v01/s01_ru_final_captions_v01.json sanitized_timing_handoff_v01/s01_ru_final_captions_v01.vtt "
+  git -C "$carrier_dir" commit -m "evidence: materialize accepted Gold S01 captions"
+  git -C "$carrier_dir" push origin "HEAD:${carrier_branch}"
+  printf 'CAPTION_CARRIER_HEAD=%s\nCAPTION_CARRIER_RESULT=PASS\nMEDIA_RENDER_STARTED=false\n' \
+    "$(git -C "$carrier_dir" rev-parse HEAD)" \
+    | tee "$WORK/runtime-evidence/caption-carrier-bridge-receipt.txt"
+fi
+
 CURRENT_PHASE=CLONE_EXACT_PRODUCTION_HEAD
 echo "PHASE=$CURRENT_PHASE"
 git init -q "$WORK/production"
