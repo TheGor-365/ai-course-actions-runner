@@ -152,7 +152,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           text=Path('.github/workflows/canonical-gold-s01-minute-proofs.yml').read_text()
-          forbidden=['remotion '+'render','.'+'mp4','execute_'+'media','canonical-minute-proofs-media-held']
+          forbidden=['remotion '+'render','.'+'mp4','execute_'+'media','canonical-minute-proofs-'+'media-held']
           assert not any(item in text for item in forbidden)
           PY
           echo CANONICAL_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=1
