@@ -1,0 +1,181 @@
+name: Materialize accepted caption carrier bridge
+
+on:
+  push:
+    branches:
+      - worker/m1-l01-s01-runner-pre-render-finalization-v1
+    paths:
+      - .github/workflows/materialize-caption-carrier-bridge.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: materialize-accepted-caption-carrier-bridge-v1
+  cancel-in-progress: false
+
+env:
+  PRODUCTION_REPO: TheGor-365/ai-course-production-system
+  CARRIER_BRANCH: evidence/m1-l01-s01-accepted-captions-v1
+  CARRIER_STAGING_HEAD: 6d121d7a81a562d38f5d8a60a5bac1cfd1521e3f
+  ACCEPTED_AUDIO_HEAD: 755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact runner bridge
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Clone exact private carrier branch
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          git clone --quiet --single-branch --branch "$CARRIER_BRANCH" \
+            "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git" production
+          test "$(git -C production rev-parse HEAD)" = "$CARRIER_STAGING_HEAD"
+          test "$(git -C production rev-parse HEAD^)" = "$ACCEPTED_AUDIO_HEAD"
+
+      - name: Fetch private issue transport envelope
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${PRODUCTION_REPO}/issues/377/comments?per_page=100" > production/comments.json
+
+      - name: Reconstruct and validate exact five files
+        working-directory: production
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          expected = {
+              "s01_ru_accepted_timing_contract_v01.json": ("716b539630ad501d16e2dac13d1a6107b601a9094a3c57941cc962dc185b4b61", 328657, "bcd93af85719bbabd53846a466294144410e1bb6ba7f12cfb9d15387ec7b9932", 34011, 4),
+              "s01_ru_final_captions_v01.json": ("5ad105306f9e9e68c790494981692e685e4a8dcbd7d68aa60629ae495356ef18", 24058, "fa9f01084bd2f4853ad1de9a5c7c8ebf824dc08d245e41fd2c8118be7ab48894", 7529, 1),
+              "s01_ru_final_captions_v01.vtt": ("6be0d0cc2df0955ce7779275af2cec9c3c71137a91a75796384c1ad17cacb855", 20198, "7a5bd1f924aecf8c028d4409684284eb9b1014fbe3f4fd25df5f037aa2e51751", 6220, 1),
+              "caption_recovery_receipt.json": ("79be42708b70cd046f88f00fe6020370357b8150b159308debb4c77977f22b2e", 770, "329efb14720e59d531f0c8bc6d856c43a7b97b68d4a661df03ddc012801a53a8", 428, 1),
+              "SHA256SUMS": ("04ba3009a5f3a697681e8c1f25002ec5b7331ad15c4d8eb9f4bfef1edfb4f254", 396, "a4a4dd64f8a1755c5a93b3f8655178d49b7f59ebc2406ce50cbe9a9d42a454fa", 264, 1),
+          }
+          comments = json.loads(Path("comments.json").read_text(encoding="utf-8"))
+          bodies = [item.get("body", "") for item in comments]
+          manifests = [body for body in bodies if body.startswith("CAPTION_BYTE_TRANSPORT_MANIFEST_V1\n")]
+          assert len(manifests) == 1, "TRANSPORT_MANIFEST_COUNT_MISMATCH"
+          for field in (
+              "encoding=gzip+base64",
+              "gzip_mtime=0",
+              "zip_sha256=16319e5664765aa29625311b7d4c2f27618c763054971fcdf7bb430beb1ef7b4",
+              "chunk_count=8",
+          ):
+              assert field in manifests[0].splitlines(), f"MANIFEST_FIELD_MISSING:{field}"
+          grouped = {name: {} for name in expected}
+          chunk_bodies = [body for body in bodies if body.startswith("CAPTION_BYTE_GZIP_CHUNK_V1\n")]
+          assert len(chunk_bodies) == 8, "TRANSPORT_CHUNK_COUNT_MISMATCH"
+          for body in chunk_bodies:
+              fields = dict(line.split("=", 1) for line in body.splitlines()[1:])
+              name = fields["file"]
+              assert name in expected, f"UNEXPECTED_TRANSPORT_FILE:{name}"
+              raw_hash, _, gzip_hash, _, total = expected[name]
+              index = int(fields["index"])
+              assert int(fields["total"]) == total, f"CHUNK_TOTAL_MISMATCH:{name}"
+              assert fields["raw_sha256"] == raw_hash, f"RAW_DECLARATION_MISMATCH:{name}"
+              assert fields["gzip_sha256"] == gzip_hash, f"GZIP_DECLARATION_MISMATCH:{name}"
+              assert index not in grouped[name], f"DUPLICATE_CHUNK:{name}:{index}"
+              grouped[name][index] = fields["payload_base64"]
+          output = Path("sanitized_timing_handoff_v01")
+          output.mkdir(parents=True, exist_ok=False)
+          raw_files = {}
+          for name, spec in expected.items():
+              raw_hash, raw_size, gzip_hash, gzip_size, total = spec
+              chunks = grouped[name]
+              assert sorted(chunks) == list(range(1, total + 1)), f"CHUNK_SEQUENCE_MISMATCH:{name}"
+              compressed = base64.b64decode("".join(chunks[i] for i in sorted(chunks)), validate=True)
+              assert len(compressed) == gzip_size, f"GZIP_SIZE_MISMATCH:{name}"
+              assert hashlib.sha256(compressed).hexdigest() == gzip_hash, f"GZIP_HASH_MISMATCH:{name}"
+              raw = gzip.decompress(compressed)
+              assert len(raw) == raw_size, f"RAW_SIZE_MISMATCH:{name}"
+              assert hashlib.sha256(raw).hexdigest() == raw_hash, f"RAW_HASH_MISMATCH:{name}"
+              (output / name).write_bytes(raw)
+              raw_files[name] = raw
+          assert {item.name for item in output.iterdir()} == set(expected), "FINAL_FILE_SET_MISMATCH"
+          sums = {}
+          for line in raw_files["SHA256SUMS"].decode("utf-8").splitlines():
+              match = re.fullmatch(r"([0-9a-f]{64})  ([^/]+)", line)
+              assert match, f"INVALID_SHA256SUMS_LINE:{line}"
+              sums[match.group(2)] = match.group(1)
+          assert set(sums) == set(expected) - {"SHA256SUMS"}, "SHA256SUMS_FILE_SET_MISMATCH"
+          for name, digest in sums.items():
+              assert hashlib.sha256(raw_files[name]).hexdigest() == digest, f"SHA256SUMS_MISMATCH:{name}"
+          timing = json.loads(raw_files["s01_ru_accepted_timing_contract_v01.json"])
+          captions = json.loads(raw_files["s01_ru_final_captions_v01.json"])
+          receipt = json.loads(raw_files["caption_recovery_receipt.json"])
+          timing_blocks = timing["final_ru_captions"]
+          json_blocks = captions["caption_blocks"]
+          assert len(timing_blocks) == len(json_blocks) == 13, "JSON_BLOCK_COUNT_MISMATCH"
+          assert timing_blocks == json_blocks, "TIMING_CAPTION_JSON_IDENTITY_MISMATCH"
+          def timestamp_ms(value):
+              match = re.fullmatch(r"(\d{2}):(\d{2}):(\d{2})\.(\d{3})", value)
+              assert match, f"INVALID_VTT_TIMESTAMP:{value}"
+              h, m, s, ms = map(int, match.groups())
+              return ((h * 60 + m) * 60 + s) * 1000 + ms
+          blocks = [block for block in raw_files["s01_ru_final_captions_v01.vtt"].decode("utf-8").strip().split("\n\n") if block]
+          assert blocks[0] == "WEBVTT" and len(blocks[1:]) == 13, "VTT_STRUCTURE_MISMATCH"
+          previous_end = -1
+          for index, (cue_text, json_block) in enumerate(zip(blocks[1:], json_blocks, strict=True)):
+              lines = cue_text.splitlines()
+              start_text, end_text = lines[1].split(" --> ", 1)
+              start_ms, end_ms = timestamp_ms(start_text), timestamp_ms(end_text)
+              assert 0 <= start_ms < end_ms <= 908398 and start_ms >= previous_end, f"VTT_RANGE_INVALID:{index}"
+              previous_end = end_ms
+              assert lines[0] == json_block["caption_block_id"], f"JSON_VTT_ID_MISMATCH:{index}"
+              assert start_ms == json_block["start_ms"] and end_ms == json_block["end_ms"], f"JSON_VTT_TIMING_MISMATCH:{index}"
+              assert "\n".join(lines[2:]) == json_block["text"], f"JSON_VTT_TEXT_MISMATCH:{index}"
+          assert previous_end == 908398, "FINAL_CAPTION_END_MISMATCH"
+          assert receipt["accepted_audio_execution_head"] == "755b8a3558b08b4b7c5d9b45d0ef01212f10ecc4"
+          assert receipt["accepted_timing_sha256"] == expected["s01_ru_accepted_timing_contract_v01.json"][0]
+          assert receipt["caption_json_sha256"] == expected["s01_ru_final_captions_v01.json"][0]
+          assert receipt["caption_vtt_sha256"] == expected["s01_ru_final_captions_v01.vtt"][0]
+          assert receipt["json_block_count"] == receipt["vtt_cue_count"] == 13
+          assert receipt["final_caption_end_ms"] == 908398
+          assert receipt["json_vtt_timing_identity"] is True
+          for key in ("regeneration_performed", "editorial_mutation_performed", "timing_mutation_performed", "segmentation_mutated"):
+              assert receipt[key] is False, f"FORBIDDEN_MUTATION:{key}"
+          print("CAPTION_CARRIER_BYTE_MATERIALIZATION=PASS")
+          print("JSON_VTT_TIMING_IDENTITY=true")
+          print("FINAL_CAPTION_END_MS=908398")
+          print("MEDIA_RENDER_STARTED=false")
+          PY
+
+      - name: Commit exact carrier and delete production staging workflow
+        working-directory: production
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          rm -f comments.json .github/workflows/materialize-accepted-caption-carrier.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = ".github/workflows/materialize-accepted-caption-carrier.yml sanitized_timing_handoff_v01/SHA256SUMS sanitized_timing_handoff_v01/caption_recovery_receipt.json sanitized_timing_handoff_v01/s01_ru_accepted_timing_contract_v01.json sanitized_timing_handoff_v01/s01_ru_final_captions_v01.json sanitized_timing_handoff_v01/s01_ru_final_captions_v01.vtt "
+          git commit -m "evidence: materialize accepted Gold S01 captions"
+          git push origin "HEAD:${CARRIER_BRANCH}"
+          printf 'CAPTION_CARRIER_HEAD=%s\nCAPTION_CARRIER_RESULT=PASS\nMEDIA_RENDER_STARTED=false\n' "$(git rev-parse HEAD)" | tee ../caption-carrier-bridge-receipt.txt
+
+      - name: Upload bridge receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-caption-carrier-bridge-${{ github.run_id }}
+          path: caption-carrier-bridge-receipt.txt
+          if-no-files-found: error
+          retention-days: 30
