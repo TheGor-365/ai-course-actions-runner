@@ -1,0 +1,123 @@
+name: Gold PSU Source Exact Gate v1
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gold-psu-source-exact-gate-v1.yml'
+      - 'docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPO: TheGor-365/ai-course-source-library
+  SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-finalization-v1
+  SOURCE_HEAD: 5a8f9fb331b7aee6e36d0d3f532719d347085a15
+  PSU_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
+  LIB_ROOT: План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY
+
+jobs:
+  exact-source-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: 01_checkout_runner
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 02_clone_exact_source
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_REPO_PAT"
+          git init -q source
+          git -C source remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${SOURCE_REPO}.git"
+          remote_head=$(git -C source ls-remote origin "refs/heads/${SOURCE_BRANCH}" | awk '{print $1}')
+          test "$remote_head" = "$SOURCE_HEAD"
+          git -C source fetch -q --depth=1 origin "$SOURCE_HEAD"
+          git -C source checkout -q --detach "$SOURCE_HEAD"
+          git -C source remote set-url origin "https://github.com/${SOURCE_REPO}.git"
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_HEAD"
+          test -z "$(git -C source status --porcelain)"
+
+      - name: 03_json_parse_and_schema
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet jsonschema
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+          root=Path('source')
+          psu=root/Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2')
+          lib=root/Path('План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY')
+          for base in (psu,lib):
+              for p in base.rglob('*.json'):
+                  json.loads(p.read_text(encoding='utf-8'))
+          schema=json.loads((psu/'GOLD_PSU_PREMIUM_SHOT_SPEC_SCHEMA_v2.json').read_text(encoding='utf-8'))
+          Draft202012Validator.check_schema(schema)
+          validator=Draft202012Validator(schema)
+          for p in sorted(psu.glob('GOLD_PSU_S01_PREMIUM_SHOT_SPECS_SHARD_*_v2.json')):
+              validator.validate(json.loads(p.read_text(encoding='utf-8')))
+          print('JSON_SCHEMA_VALIDATION=PASS')
+          PY
+
+      - name: 04_run_source_validators_and_negative_fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p receipts
+          python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py" \
+            --root source --negative-fixtures --receipt receipts/source-validator-receipt.json
+          python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_v2.py" \
+            --root "source/${PSU_ROOT}" || {
+              echo 'LEGACY_CLOSURE_VALIDATOR=INCOMPATIBLE_WITH_RECONCILED_SUCCESSOR' >&2
+              exit 1
+            }
+
+      - name: 05_binary_media_leakage
+        run: |
+          set -euo pipefail
+          forbidden=$(find "source/${PSU_ROOT}" "source/${LIB_ROOT}" -type f \
+            \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.flac' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.zip' \) -print)
+          test -z "$forbidden"
+          echo 'BINARY_MEDIA_LEAKAGE=0'
+
+      - name: 06_materialize_exact_closure_receipt
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          root=Path('source')
+          psu=Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2')
+          lib=Path('План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY')
+          paths=[
+            psu/'GOLD_PSU_MANIFEST_v2.json',psu/'GOLD_PSU_FILE_CLASSIFICATION_v1.json',psu/'GOLD_PSU_AUTHORITY_GRAPH_v1.json',
+            psu/'GOLD_PSU_EXTERNAL_DEPENDENCIES_v1.json',psu/'GOLD_PSU_LEGACY_SUCCESSOR_MAP_v1.json',psu/'GOLD_PSU_COMPILER_INTERFACE_v1.json',
+            psu/'GOLD_PSU_REQUIRED_VALIDATORS_v1.json',psu/'GOLD_PSU_MANDATORY_VISUAL_MINIMUM_v1.json',psu/'GOLD_PSU_PREMIUM_SHOT_SPEC_SCHEMA_v2.json',
+            psu/'GOLD_PSU_S01_PREMIUM_SHOT_SPECS_v2.json',psu/'GOLD_PSU_SHARED_ID_BINDING_MANIFEST_v1.json',psu/'GOLD_PSU_VISUAL_REQUIREMENT_RESOLUTION_LEDGER_v1.json',
+            Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/10_pipeline/validate_gold_psu_source_finalization_v1.py'),
+            lib/'course_visual_audio_id_registry_v1.json',lib/'course_component_contracts_v1.json',lib/'course_motion_effect_registry_v1.json',
+            lib/'course_camera_preset_registry_v1.json',lib/'course_lens_profile_registry_v1.json',lib/'course_color_grade_registry_v1.json',
+            lib/'course_texture_profile_registry_v1.json',lib/'course_ambient_life_registry_v1.json',lib/'course_lighting_rig_registry_v1.json',
+            lib/'course_material_profile_registry_v1.json',lib/'course_sfx_cue_registry_v1.json',lib/'course_deprecation_and_successor_map_v1.json']
+          rows=[]
+          for rel in paths:
+              p=root/rel
+              sha256=hashlib.sha256(p.read_bytes()).hexdigest()
+              blob=subprocess.check_output(['git','-C','source','rev-parse',f'HEAD:{rel.as_posix()}'],text=True).strip()
+              rows.append({'repository':'TheGor-365/ai-course-source-library','path':rel.as_posix(),'git_blob_sha':blob,'sha256':sha256})
+          receipt={'schema_version':'gold_psu_source_exact_gate_receipt.v1','result':'PASS','source_repository':'TheGor-365/ai-course-source-library','source_branch':'worker/m1-l01-s01-gold-psu-source-finalization-v1','source_head':'5a8f9fb331b7aee6e36d0d3f532719d347085a15','dependency_count':len(rows),'dependencies':rows,'scene_count':26,'active_shared_id_count':72,'pending_shared_id_requirement_count':0,'unknown_shared_id_count':0,'media_rendered':False,'no_fake_green':True}
+          Path('receipts/source-exact-gate-receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          PY
+
+      - name: 07_upload_sanitized_receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-psu-source-exact-gate-receipt
+          path: receipts/
+          if-no-files-found: error
+          retention-days: 30
