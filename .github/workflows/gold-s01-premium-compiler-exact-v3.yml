@@ -69,8 +69,10 @@ jobs:
           python3 -m py_compile "$compiler_root/premium_scene_compiler_exact_v3.py" "$compiler_root/premium_scene_compiler_v2.py" /tmp/premium_scene_compiler_exact_v3.py
 
       - name: 04_run_actual_exact_source_v2_compiler
+        id: compiler
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
           psu="source/${PACKAGE_ROOT}/00_gold_psu_v2"
           library="source/План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY"
           module=production/03_modules/M1/L01/04_render_migration/gold_s01_visual_v2
@@ -81,6 +83,7 @@ jobs:
           registry="$library/course_visual_audio_id_registry_v1.json"
           assets="$module/asset_registry_v1.json"
           timing="$module/timing_binding_v1.json"
+          set +e
           python3 "$compiler" \
             --source-dir source \
             --production-dir production \
@@ -99,9 +102,31 @@ jobs:
             --asset-registry-file "$assets" \
             --asset-registry-sha256 "$(sha256sum "$assets" | awk '{print $1}')" \
             --output-dir compiler-output \
-            | tee compiler-output/compiler-stdout.json
+            > compiler-output/compiler.log 2>&1
+          code=$?
+          set -e
+          cat compiler-output/compiler.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: 05_validate_actual_compiler_outputs
+      - name: 05_upload_compiler_diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-premium-compiler-diagnostic-${{ github.sha }}
+          path: compiler-output/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 06_fail_closed_on_compiler_error
+        if: steps.compiler.outputs.exit_code != '0'
+        run: |
+          echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=FAIL'
+          echo 'MEDIA_RENDER_STARTED=false'
+          exit 1
+
+      - name: 07_validate_actual_compiler_outputs
+        if: steps.compiler.outputs.exit_code == '0'
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -158,7 +183,8 @@ jobs:
           print(raw)
           PY
 
-      - name: 06_upload_actual_compiler_outputs
+      - name: 08_upload_actual_compiler_outputs
+        if: steps.compiler.outputs.exit_code == '0'
         uses: actions/upload-artifact@v4
         with:
           name: gold-s01-premium-compiler-${{ env.SOURCE_HEAD }}-${{ env.PRODUCTION_HEAD }}
@@ -166,7 +192,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 07_stop_before_media_render
+      - name: 09_stop_before_media_render
+        if: steps.compiler.outputs.exit_code == '0'
         run: |
           set -euo pipefail
           echo 'PREMIUM_COMPILER_ACTUAL_S01_RUN=PASS'
