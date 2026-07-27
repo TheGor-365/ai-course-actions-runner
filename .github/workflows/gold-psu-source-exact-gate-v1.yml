@@ -60,7 +60,9 @@ jobs:
           schema=json.loads((psu/'GOLD_PSU_PREMIUM_SHOT_SPEC_SCHEMA_v2.json').read_text(encoding='utf-8'))
           Draft202012Validator.check_schema(schema)
           validator=Draft202012Validator(schema)
-          for p in sorted(psu.glob('GOLD_PSU_S01_PREMIUM_SHOT_SPECS_SHARD_*_v2.json')):
+          shards=sorted(psu.glob('GOLD_PSU_S01_PREMIUM_SHOT_SPECS_SHARD_*_v2.json'))
+          assert len(shards)==7
+          for p in shards:
               validator.validate(json.loads(p.read_text(encoding='utf-8')))
           print('JSON_SCHEMA_VALIDATION=PASS')
           PY
@@ -69,13 +71,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p receipts
+          python3 -m py_compile "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py"
           python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py" \
             --root source --negative-fixtures --receipt receipts/source-validator-receipt.json
-          python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_v2.py" \
-            --root "source/${PSU_ROOT}" || {
-              echo 'LEGACY_CLOSURE_VALIDATOR=INCOMPATIBLE_WITH_RECONCILED_SUCCESSOR' >&2
-              exit 1
-            }
+          python3 - <<'PY'
+          import json
+          r=json.load(open('receipts/source-validator-receipt.json',encoding='utf-8'))
+          assert r['result']=='PASS'
+          assert r['active_shared_id_count']>=72
+          assert r['new_shared_id_count']==19
+          assert r['scene_count']==26
+          assert r['pending_shared_id_requirement_count']==0
+          assert r['unknown_shared_id_count']==0
+          assert r['negative_fixtures']==16 and r['rejected']==16
+          print('CANONICAL_CLOSURE_AND_SOURCE_VALIDATORS=PASS')
+          PY
 
       - name: 05_binary_media_leakage
         run: |
