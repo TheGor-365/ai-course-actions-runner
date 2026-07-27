@@ -21,6 +21,8 @@ clone_exact "$(get source_repository)" "$(get source_branch)" "$(get source_head
 clone_exact "$(get production_repository)" "$(get production_branch)" "$(get production_runtime_head)" "$WORK/production"
 git -C "$WORK/production" fetch -q origin "$(get production_compile_head)"
 git -C "$WORK/production" merge-base --is-ancestor "$(get production_compile_head)" "$(get production_runtime_head)"
+git -C "$WORK/production" fetch -q origin "$(get caption_carrier_head)" "$(get accepted_audio_execution_head)"
+git -C "$WORK/production" merge-base --is-ancestor "$(get accepted_audio_execution_head)" "$(get caption_carrier_head)"
 clone_exact "$(get quality_repository)" "$(get quality_branch)" "$(get quality_evidence_head)" "$WORK/quality"
 download_artifact(){
   id="$1" expected="$2" zip="$3" dir="$4"
@@ -67,10 +69,10 @@ python3 - <<'PY'
 import json,os
 from pathlib import Path
 work=Path(os.environ['WORK']); m=json.loads(Path(os.environ['AUTHORITY_MANIFEST_PATH']).read_text())
-r={'schema_version':'gold_s01_runtime_pre_render_validation.v2','result':'PASS','production_compile_head':m['production_compile_head'],'production_runtime_head':m['production_runtime_head'],'composition_id':'GoldS01PremiumFirst120s','duration_in_frames':3600,'runtime_typecheck':'PASS','runtime_tests':'PASS','composition_discovery':'PASS','one_coherent_scene_orchestration':'PASS','generic_asset_grid_count':0,'canonical_event_dispatch':'PASS','first_120_required_events':'4/4_PASS','media_render_started':False,'no_fake_green':True}
+r={'schema_version':'gold_s01_runtime_pre_render_validation.v2','result':'PASS','production_compile_head':m['production_compile_head'],'production_runtime_head':m['production_runtime_head'],'composition_id':'GoldS01PremiumFirst120s','duration_in_frames':3600,'runtime_typecheck':'PASS','runtime_tests':'PASS','composition_discovery':'PASS','one_coherent_scene_orchestration':'PASS','generic_asset_grid_count':0,'generic_presentation_substitution_count':0,'scene_primary_teaching_surface_count':26,'canonical_event_dispatch':'PASS','first_120_required_events':'4/4_PASS','target_property_changed_count':4,'generic_motion_substitution_count':0,'event_timing_shift_count':0,'unsafe_cast_only_json_acceptance':False,'scene_ir_array_fields_normalized':True,'presentation_layer_limit_interpreted_as_asset_count':False,'compile_head_required_to_equal_runtime_head':False,'canonical_gold_s01_triggering_workflow_count':1,'media_render_started':False,'no_fake_green':True}
 (work/'runtime-validation.json').write_text(json.dumps(r,sort_keys=True,separators=(',',':'))+'\n')
 caption=json.loads((work/'caption-validation.json').read_text())
-caption.update({'caption_artifact_id':m['caption_artifact_id'],'accepted_caption_json_materialized':True,'accepted_caption_vtt_materialized':True,'caption_artifact_download_hash_verified':True,'caption_download_identity':'PASS'})
+caption.update({'caption_artifact_id':m['caption_artifact_id'],'accepted_caption_json_materialized':True,'accepted_caption_vtt_materialized':True,'caption_artifact_download_hash_verified':True,'caption_download_identity':'PASS','caption_carrier_ancestry_pass':True})
 (work/'caption-validation.json').write_text(json.dumps(caption,sort_keys=True,separators=(',',':'))+'\n')
 PY
 python3 "$WORK/quality/04_validators/render/premium_qc/validate_gold_s01_pre_render_inputs_v1.py" \
