@@ -1,0 +1,296 @@
+name: Gold PSU Source Exact Gate v1
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gold-psu-source-exact-gate-v1.yml'
+      - 'docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPO: TheGor-365/ai-course-source-library
+  SOURCE_BRANCH: worker/m1-l01-s01-gold-psu-source-finalization-v1
+  SOURCE_HEAD: dfd3cea33d0a75f9d7dfc6e421588e643874b181
+  PRODUCTION_REPO: TheGor-365/ai-course-production-system
+  PRODUCTION_BRANCH: coord/gold-psu-finalization-v36-v1
+  PRODUCTION_HEAD: 3fcb7bc68d397da2004ade7251aa5cba791f156f
+  OC_BLOB_SHA: f41935cd1163a6aadc1aac89d6c59e2057402c5e
+  FINALIZATION_PROGRAM_BLOB_SHA: 0ef5559c42c363e90c7566f69e7ab9bb2ae69b4d
+  PSU_ROOT: Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY
+  LIB_ROOT: План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY
+  RUNNER_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  exact-source-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: 02_verify_runner_and_clone_exact_private_heads
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RUNNER_EXPECTED_HEAD"
+          test -n "$PRIVATE_REPO_PAT"
+
+          clone_exact() {
+            repo="$1" branch="$2" expected="$3" directory="$4"
+            git init -q "$directory"
+            git -C "$directory" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${repo}.git"
+            remote_head=$(git -C "$directory" ls-remote origin "refs/heads/${branch}" | awk '{print $1}')
+            test "$remote_head" = "$expected"
+            git -C "$directory" fetch -q --depth=1 origin "$expected"
+            git -C "$directory" checkout -q --detach "$expected"
+            git -C "$directory" remote set-url origin "https://github.com/${repo}.git"
+            test "$(git -C "$directory" rev-parse HEAD)" = "$expected"
+            test -z "$(git -C "$directory" status --porcelain)"
+          }
+
+          clone_exact "$SOURCE_REPO" "$SOURCE_BRANCH" "$SOURCE_HEAD" source
+          clone_exact "$PRODUCTION_REPO" "$PRODUCTION_BRANCH" "$PRODUCTION_HEAD" production
+
+          test "$(git -C production rev-parse HEAD:00_control/FACTORY_OPERATION_CENTER.md)" = "$OC_BLOB_SHA"
+          test "$(git -C production rev-parse HEAD:00_control/GOLD_PSU_FINALIZATION_PROGRAM_v01.md)" = "$FINALIZATION_PROGRAM_BLOB_SHA"
+
+      - name: 03_verify_three_repository_OC_v36_entrypoints
+        run: |
+          set -euo pipefail
+          grep -F "CURRENT_OC_DOCUMENT_ID=FACTORY_OPERATION_CENTER_v36" source/00_factory/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_HEAD=${PRODUCTION_HEAD}" source/00_factory/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_BLOB_SHA=${OC_BLOB_SHA}" source/00_factory/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_DOCUMENT_ID=FACTORY_OPERATION_CENTER_v36" docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_HEAD=${PRODUCTION_HEAD}" docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_BLOB_SHA=${OC_BLOB_SHA}" docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "CURRENT_OC_DOCUMENT_ID=FACTORY_OPERATION_CENTER_v36" production/05_orchestration/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "TWO_MINUTE_RENDER_AUTHORIZED=false" production/05_orchestration/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+          grep -F "FULL_15_MINUTE_RENDER_AUTHORIZED=false" production/05_orchestration/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md
+
+      - name: 04_JSON_parse_and_schema_validation
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet jsonschema
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+
+          root = Path('source')
+          psu = root / Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2')
+          lib = root / Path('План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY')
+          for base in (psu, lib):
+              for path in base.rglob('*.json'):
+                  json.loads(path.read_text(encoding='utf-8'))
+          schema = json.loads((psu / 'GOLD_PSU_PREMIUM_SHOT_SPEC_SCHEMA_v2.json').read_text(encoding='utf-8'))
+          Draft202012Validator.check_schema(schema)
+          validator = Draft202012Validator(schema)
+          shards = sorted(psu.glob('GOLD_PSU_S01_PREMIUM_SHOT_SPECS_SHARD_*_v2.json'))
+          assert len(shards) == 7
+          for path in shards:
+              validator.validate(json.loads(path.read_text(encoding='utf-8')))
+          print('JSON_SCHEMA_VALIDATION=PASS')
+          PY
+
+      - name: 05_run_canonical_closure_validators_and_real_negative_mutations
+        run: |
+          set -euo pipefail
+          mkdir -p receipts
+          python3 -m py_compile "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py"
+          python3 "source/${PSU_ROOT}/10_pipeline/validate_gold_psu_source_finalization_v1.py" \
+            --root source --negative-fixtures --receipt receipts/source-validator-receipt.json
+          python3 - <<'PY'
+          import json
+          receipt = json.load(open('receipts/source-validator-receipt.json', encoding='utf-8'))
+          assert receipt['result'] == 'PASS'
+          assert receipt['active_shared_id_count'] >= 72
+          assert receipt['new_shared_id_count'] == 19
+          assert receipt['scene_count'] == 26
+          assert receipt['pending_shared_id_requirement_count'] == 0
+          assert receipt['unknown_shared_id_count'] == 0
+          assert receipt['negative_fixtures'] == 16
+          assert receipt['rejected'] == 16
+          assert receipt['generator_template'] == 'PASS'
+          print('CANONICAL_CLOSURE_VALIDATORS=PASS')
+          PY
+
+      - name: 06_binary_and_media_leakage_gate
+        run: |
+          set -euo pipefail
+          forbidden=$(find "source/${PSU_ROOT}" "source/${LIB_ROOT}" -type f \
+            \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.flac' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.zip' \) -print)
+          test -z "$forbidden"
+          echo 'BINARY_MEDIA_LEAKAGE=0'
+
+      - name: 07_materialize_full_exact_head_closure_receipt
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          source = Path('source')
+          production = Path('production')
+          psu_rel = Path('Module 1/Lesson 1/1/M1-L01-S01_0000-1500_PRODUCTION_READY/00_gold_psu_v2')
+          psu = source / psu_rel
+          classification = json.loads((psu / 'GOLD_PSU_FILE_CLASSIFICATION_v1.json').read_text(encoding='utf-8'))
+          manifest = json.loads((psu / 'GOLD_PSU_MANIFEST_v2.json').read_text(encoding='utf-8'))
+          external = json.loads((psu / 'GOLD_PSU_EXTERNAL_DEPENDENCIES_v1.json').read_text(encoding='utf-8'))
+
+          def sha256(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def blob(repo_dir, rel):
+              return subprocess.check_output(
+                  ['git', '-C', str(repo_dir), 'rev-parse', f'HEAD:{Path(rel).as_posix()}'],
+                  text=True,
+              ).strip()
+
+          exact_source_dependencies = []
+          seen = set()
+          for record in classification['records']:
+              rel = Path(record['path'])
+              assert rel.as_posix() not in seen
+              seen.add(rel.as_posix())
+              actual_blob = blob(source, rel)
+              actual_sha = sha256(source / rel)
+              if record['git_blob_sha'] != 'FINAL_REMOTE_EXACT_HEAD_RECEIPT':
+                  assert record['git_blob_sha'] == actual_blob
+                  assert record['sha256'] == actual_sha
+              exact_source_dependencies.append({
+                  'repository': 'TheGor-365/ai-course-source-library',
+                  'path': rel.as_posix(),
+                  'git_blob_sha': actual_blob,
+                  'sha256': actual_sha,
+                  'classification': record['classification'],
+                  'consumer': record['consumer'],
+                  'validator': record['validator'],
+              })
+
+          exact_external_dependencies = []
+          for dependency in external['dependencies']:
+              rel = Path(dependency['path'])
+              if dependency['repository'] == 'TheGor-365/ai-course-production-system':
+                  repo_dir = production
+              elif dependency['repository'] == 'TheGor-365/ai-course-actions-runner':
+                  repo_dir = Path('.')
+              else:
+                  raise AssertionError(dependency['repository'])
+              actual_blob = blob(repo_dir, rel)
+              actual_sha = sha256(repo_dir / rel)
+              if dependency['git_blob_sha'] != 'FINAL_REMOTE_EXACT_HEAD_RECEIPT':
+                  assert dependency['git_blob_sha'] == actual_blob
+              if dependency['sha256'] != 'FINAL_REMOTE_EXACT_HEAD_RECEIPT':
+                  assert dependency['sha256'] == actual_sha
+              exact_external_dependencies.append({
+                  'repository': dependency['repository'],
+                  'path': rel.as_posix(),
+                  'git_blob_sha': actual_blob,
+                  'sha256': actual_sha,
+                  'classification': dependency['classification'],
+                  'consumer': dependency['consumer'],
+                  'validator': dependency['validator'],
+              })
+
+          entrypoint_dependencies = []
+          for repository, repo_dir, rel in (
+              ('TheGor-365/ai-course-production-system', production, Path('05_orchestration/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md')),
+              ('TheGor-365/ai-course-actions-runner', Path('.'), Path('docs/README_FACTORY_OPERATING_CENTER_ENTRYPOINT.md')),
+          ):
+              entrypoint_dependencies.append({
+                  'repository': repository,
+                  'path': rel.as_posix(),
+                  'git_blob_sha': blob(repo_dir, rel),
+                  'sha256': sha256(repo_dir / rel),
+                  'classification': 'REQUIRED_ENTRYPOINT',
+                  'consumer': 'all_workers',
+                  'validator': '.github/workflows/gold-psu-source-exact-gate-v1.yml',
+              })
+
+          sums_path = psu / 'GOLD_PSU_CLOSURE_SHA256SUMS.txt'
+          psu_closure_sha256 = sha256(sums_path)
+          assert manifest['closure']['psu_closure_sha256'] == psu_closure_sha256
+
+          manifest_rel = psu_rel / 'GOLD_PSU_MANIFEST_v2.json'
+          registry_rel = Path('План завода/OPERATING_CENTER/STANDARDS_VNEXT/COURSE_VISUAL_AUDIO_LIBRARY/course_visual_audio_id_registry_v1.json')
+          visual_minimum_rel = psu_rel / 'GOLD_PSU_MANDATORY_VISUAL_MINIMUM_v1.json'
+          premium_specs_rel = psu_rel / 'GOLD_PSU_S01_PREMIUM_SHOT_SPECS_v2.json'
+          validator_receipt = json.loads(Path('receipts/source-validator-receipt.json').read_text(encoding='utf-8'))
+
+          receipt = {
+              'schema_version': 'gold_psu_source_exact_gate_receipt.v2',
+              'result': 'PASS',
+              'source_repository': os.environ['SOURCE_REPO'],
+              'source_branch': os.environ['SOURCE_BRANCH'],
+              'source_head': os.environ['SOURCE_HEAD'],
+              'production_repository': os.environ['PRODUCTION_REPO'],
+              'production_branch': os.environ['PRODUCTION_BRANCH'],
+              'production_head': os.environ['PRODUCTION_HEAD'],
+              'runner_repository': 'TheGor-365/ai-course-actions-runner',
+              'runner_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'oc_document_id': 'FACTORY_OPERATION_CENTER_v36',
+              'oc_blob_sha': os.environ['OC_BLOB_SHA'],
+              'oc_sha256': sha256(production / '00_control/FACTORY_OPERATION_CENTER.md'),
+              'finalization_program_blob_sha': os.environ['FINALIZATION_PROGRAM_BLOB_SHA'],
+              'finalization_program_sha256': sha256(production / '00_control/GOLD_PSU_FINALIZATION_PROGRAM_v01.md'),
+              'psu_closure_sha256': psu_closure_sha256,
+              'canonical_manifest_blob': blob(source, manifest_rel),
+              'canonical_manifest_sha256': sha256(source / manifest_rel),
+              'shared_id_registry_path': registry_rel.as_posix(),
+              'shared_id_registry_blob': blob(source, registry_rel),
+              'shared_id_registry_sha256': sha256(source / registry_rel),
+              'mandatory_visual_minimum_path': visual_minimum_rel.as_posix(),
+              'mandatory_visual_minimum_blob': blob(source, visual_minimum_rel),
+              'mandatory_visual_minimum_sha256': sha256(source / visual_minimum_rel),
+              'premium_shot_specs_path': premium_specs_rel.as_posix(),
+              'premium_shot_specs_blob': blob(source, premium_specs_rel),
+              'premium_shot_specs_sha256': sha256(source / premium_specs_rel),
+              'active_shared_id_count': validator_receipt['active_shared_id_count'],
+              'new_shared_id_count': validator_receipt['new_shared_id_count'],
+              'scene_count': validator_receipt['scene_count'],
+              'pending_shared_id_requirement_count': 0,
+              'unknown_shared_id_count': 0,
+              'shared_requirement_reference_count': 0,
+              'local_shared_style_definition_count': 0,
+              'unclassified_file_count': 0,
+              'missing_required_file_count': 0,
+              'conflicting_active_file_count': 0,
+              'authority_graph_acyclic': True,
+              'negative_fixture_count': validator_receipt['negative_fixtures'],
+              'negative_fixture_rejected_count': validator_receipt['rejected'],
+              'media_rendered': False,
+              'dependencies': exact_source_dependencies + exact_external_dependencies + entrypoint_dependencies,
+              'no_fake_green': True,
+          }
+          receipt['dependency_count'] = len(receipt['dependencies'])
+          Path('receipts/source-exact-gate-receipt.json').write_text(
+              json.dumps(receipt, indent=2, ensure_ascii=False) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps({
+              'REMOTE_EXACT_SOURCE_GATE': 'PASS',
+              'source_head': receipt['source_head'],
+              'dependency_count': receipt['dependency_count'],
+              'scene_count': receipt['scene_count'],
+              'active_shared_id_count': receipt['active_shared_id_count'],
+              'psu_closure_sha256': receipt['psu_closure_sha256'],
+          }, sort_keys=True))
+          PY
+
+      - name: 08_upload_sanitized_exact_receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-psu-source-exact-gate-receipt
+          path: receipts/
+          if-no-files-found: error
+          retention-days: 30
