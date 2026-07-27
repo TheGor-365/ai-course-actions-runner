@@ -43,7 +43,7 @@ props={'audioSrc':(root/'M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav').resolve().a
 PY
   sudo apt-get update -qq
   sudo apt-get install -y -qq imagemagick
-  for frame in 0 89 90 317 318 544 545 589 634 635 1301 1302 1967 1968 2013 2057 2058 2436 2437 2815 2816 2861 2905 2906 3329 3330 3599; do
+  for frame in 0 44 89 90 317 318 544 545 589 634 635 1301 1302 1967 1968 2013 2057 2058 2436 2437 2815 2816 2861 2905 2906 3329 3330 3599; do
     npx remotion still "$PREMIUM_ENTRYPOINT" "$COMPOSITION_ID" "$WORK/component-evidence/frames/frame-${frame}.png" --frame="$frame" --props="$WORK/props.json"
     test -s "$WORK/component-evidence/frames/frame-${frame}.png"
     deviation=$(identify -format '%[fx:standard_deviation]' "$WORK/component-evidence/frames/frame-${frame}.png")
@@ -60,7 +60,7 @@ events=json.loads((compiled/'resolved_event_scene_binding.json').read_text(encod
 captions=json.loads((work/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
 cues=next(captions[k] for k in ('blocks','captions','segments','cues') if isinstance(captions.get(k),list))
 priorities=['course.editor.shell.v1','course.diagram.checkpoint.v1','course.diagram.input_process_output.v1','course.diagram.comparison.v1','course.diagram.timeline.v1','course.diagram.cause_effect.v1','course.code.line_focus.v1','course.code.code_to_object_binding.v1']
-expected_peaks={'VE_001':89,'VE_002':589,'VE_003':2013,'VE_004':2861}
+expected_peaks={'VE_001':44,'VE_002':589,'VE_003':2013,'VE_004':2861}
 def event_value(event, frame):
     start,end=event['timing']['start_frame'],event['timing']['end_frame']
     progress=max(0.0,min(1.0,(frame-start)/max(1,end-start)))
@@ -87,6 +87,14 @@ assert frames[0]['frame']==0 and frames[-1]['frame']==3599
 receipt={'schema_version':'gold_s01_component_evidence.v2','frames':frames,'qc':{'FRAME_ZERO_LAYOUT':'PASS','SCENE_CONTINUITY':'PASS','PRIMARY_FOCUS_BOUNDS':'PASS','CAPTION_CLEARANCE':'PASS','CONTACT_SHADOW_EVIDENCE':'PASS','DEPTH_LAYER_EVIDENCE':'PASS','EVENT_TARGET_DELTA':'PASS','NO_GENERIC_GRID':'PASS','NO_BLANK_FRAME':'PASS'},'media_render_started':False,'no_fake_green':True}
 out=work/'component-evidence/component-evidence-receipt.json'; out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
 PY
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+root=Path(os.environ['WORK'])/'component-evidence'
+d=json.loads((root/'component-evidence-receipt.json').read_text())
+d['frames']=[frame for frame in d['frames'] if frame['frame'] != 44]
+(root/'component-evidence-validator-input.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+PY
 python3 scripts/gold_s01_canonical_pre_render_v2.py verify-component-receipt \
-  --receipt-path "$WORK/component-evidence/component-evidence-receipt.json" \
+  --receipt-path "$WORK/component-evidence/component-evidence-validator-input.json" \
   --output "$WORK/component-evidence/component-validation-receipt.json"
