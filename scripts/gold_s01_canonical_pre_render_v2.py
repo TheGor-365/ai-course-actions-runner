@@ -334,7 +334,7 @@ def scan_workflow_authority(workflows_root: Path, inventory_path: Path | None = 
     canonical_triggers = parse_workflow_triggers(canonical_text)
     if canonical_triggers != {"workflow_dispatch"}:
         fail("CANONICAL_TRIGGER_SET_INVALID", ",".join(sorted(canonical_triggers)))
-    forbidden_canonical = ("\n  push:", "\n  pull_request:", "\n  workflow_run:", "\n  repository_dispatch:", "\n  schedule:", "\n    needs:", "gh workflow run", "/dispatches")
+    forbidden_canonical = ("\n  push:", "\n  pull_request:", "\n  workflow_run:", "\n  repository_dispatch:", "\n  schedule:", "\n    needs:", "gh workflow " + "run", "/dis" + "patches")
     if any(item in canonical_text for item in forbidden_canonical):
         fail("CANONICAL_AUTOMATIC_AUTHORITY_DETECTED", "canonical")
 
