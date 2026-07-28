@@ -37,7 +37,14 @@ import json, os
 from pathlib import Path
 root=Path(os.environ['WORK'])
 d=json.loads((root/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
-captions=next(d[k] for k in ('caption_blocks','blocks','captions','segments','cues') if isinstance(d.get(k),list))
+raw_captions=next(d[k] for k in ('caption_blocks','blocks','captions','segments','cues') if isinstance(d.get(k),list))
+captions=[]
+for index,cue in enumerate(raw_captions):
+    if not isinstance(cue,dict): raise SystemExit(f'CAPTION_RUNTIME_ADAPTER_OBJECT_REQUIRED:{index}')
+    cue_id=cue.get('id') or cue.get('caption_block_id')
+    if not isinstance(cue_id,str) or not cue_id: raise SystemExit(f'CAPTION_RUNTIME_ADAPTER_ID_REQUIRED:{index}')
+    captions.append({'id':cue_id,'start_ms':cue.get('start_ms'),'end_ms':cue.get('end_ms'),'text':cue.get('text')})
+if len(captions)!=13 or len({cue['id'] for cue in captions})!=13: raise SystemExit('CAPTION_RUNTIME_ADAPTER_IDENTITY_FAILED')
 props={'audioSrc':(root/'M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav').resolve().as_uri(),'captions':captions,'acceptedTimingSha256':os.environ['ACCEPTED_TIMING_SHA256'],'captionJsonSha256':os.environ['ACCEPTED_CAPTION_JSON_SHA256'],'captionVttSha256':os.environ['CAPTION_VTT_SHA256']}
 (root/'props.json').write_text(json.dumps(props,ensure_ascii=False),encoding='utf-8')
 PY
