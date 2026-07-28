@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${PRIVATE_REPO_PAT:?}" "${PRODUCTION_BRANCH:?}" "${PRODUCTION_RUNTIME_HEAD:?}" "${PRODUCTION_COMPILE_HEAD:?}"
+: "${PRIVATE_REPO_PAT:?}" "${PRODUCTION_REPO:?}" "${PRODUCTION_BRANCH:?}" "${PRODUCTION_RUNTIME_HEAD:?}" "${PRODUCTION_COMPILE_HEAD:?}"
 : "${COMPILER_ARTIFACT_ID:?}" "${COMPILER_ARTIFACT_SHA256:?}" "${CAPTION_ARTIFACT_ID:?}" "${CAPTION_ARTIFACT_SHA256:?}"
-: "${CAPTION_VTT_SHA256:?}" "${ACCEPTED_AUDIO_HEAD:?}" "${GH_TOKEN:?}" "${WORK:?}"
-for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD" "$ACCEPTED_AUDIO_HEAD"; do test "${#value}" = 40; done
+: "${CAPTION_VTT_SHA256:?}" "${ACCEPTED_AUDIO_HEAD:?}" "${ACCEPTED_TIMING_SHA256:?}" "${ACCEPTED_CAPTION_JSON_SHA256:?}"
+: "${A3483_SHA256:?}" "${GH_TOKEN:?}" "${GITHUB_SHA:?}" "${GITHUB_REPOSITORY:?}" "${WORK:?}"
+: "${REMOTION_ROOT:?}" "${PREMIUM_ENTRYPOINT:?}" "${COMPOSITION_ID:?}"
+for value in "$PRODUCTION_RUNTIME_HEAD" "$PRODUCTION_COMPILE_HEAD" "$ACCEPTED_AUDIO_HEAD" "$GITHUB_SHA"; do
+  test "${#value}" = 40
+done
+REQUIRED_EVIDENCE_FRAMES=(
+  0 44 89 90 317 318 544 545 589 634 635 1301 1302 1967 1968
+  2013 2057 2058 2436 2437 2815 2816 2861 2905 2906 3329 3330 3599
+)
+test "${#REQUIRED_EVIDENCE_FRAMES[@]}" = 28
 mkdir -p "$WORK/component-evidence/frames"
 git init -q "$WORK/production"
 git -C "$WORK/production" remote add origin "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git"
@@ -50,7 +59,7 @@ props={'audioSrc':(root/'M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav').resolve().a
 PY
   sudo apt-get update -qq
   sudo apt-get install -y -qq imagemagick
-  for frame in 0 44 89 90 317 318 544 545 589 634 635 1301 1302 1967 1968 2013 2057 2058 2436 2437 2815 2816 2861 2905 2906 3329 3330 3599; do
+  for frame in "${REQUIRED_EVIDENCE_FRAMES[@]}"; do
     npx remotion still "$PREMIUM_ENTRYPOINT" "$COMPOSITION_ID" "$WORK/component-evidence/frames/frame-${frame}.png" --frame="$frame" --props="$WORK/props.json"
     test -s "$WORK/component-evidence/frames/frame-${frame}.png"
     deviation=$(identify -format '%[fx:standard_deviation]' "$WORK/component-evidence/frames/frame-${frame}.png")
@@ -58,7 +67,7 @@ PY
   done
 )
 python3 - <<'PY'
-import hashlib, json, os
+import hashlib, json, os, re, subprocess
 from pathlib import Path
 work=Path(os.environ['WORK'])
 compiled=work/'production/03_modules/M1/L01/04_render_migration/gold_s01_visual_v2/compiler_outputs_v3'
@@ -67,41 +76,64 @@ events=json.loads((compiled/'resolved_event_scene_binding.json').read_text(encod
 captions=json.loads((work/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
 cues=next(captions[k] for k in ('caption_blocks','blocks','captions','segments','cues') if isinstance(captions.get(k),list))
 priorities=['course.editor.shell.v1','course.diagram.checkpoint.v1','course.diagram.input_process_output.v1','course.diagram.comparison.v1','course.diagram.timeline.v1','course.diagram.cause_effect.v1','course.code.line_focus.v1','course.code.code_to_object_binding.v1']
-expected_peaks={'VE_001':44,'VE_002':589,'VE_003':2013,'VE_004':2861}
+probes={'VE_001':{'start':0,'peak':44,'end':90},'VE_002':{'start':545,'peak':589,'end':635},'VE_003':{'start':1968,'peak':2013,'end':2058},'VE_004':{'start':2816,'peak':2861,'end':2906}}
+required_frames=[0,44,89,90,317,318,544,545,589,634,635,1301,1302,1967,1968,2013,2057,2058,2436,2437,2815,2816,2861,2905,2906,3329,3330,3599]
+internal_id_pattern=re.compile(r'(?i)(?:\bVE_\d{3}\b|\bcourse\.[a-z0-9_.-]+\b|\btarget\.[a-z0-9_.-]+\b|\bhandler\.[a-z0-9_.-]+\b)')
+debug_pattern=re.compile(r'(?i)(?:debug[_:. -]|production_runtime_head|compiler_artifact_id|frame_sha256|data-[a-z0-9_-]+)')
 def event_value(event, frame):
     start,end=event['timing']['start_frame'],event['timing']['end_frame']
     progress=max(0.0,min(1.0,(frame-start)/max(1,end-start)))
     if event['handler_id']=='roadmap_step_unlock_v1':
         return event['parameters']['beforeLocked'] if progress < event['phase_model']['enterRatio'] else event['parameters']['afterLocked']
     return progress
-frames=[]; peak_delta={key:False for key in expected_peaks}
+def visible_text(scene):
+    values=[]
+    for key in ('foreground_layer','midground_layer','background_layer'):
+        value=scene.get(key,[])
+        if isinstance(value,list): values.extend(str(item) for item in value)
+        elif value is not None: values.append(str(value))
+    return '\n'.join(values)
+frames=[]
 for png in sorted((work/'component-evidence/frames').glob('frame-*.png'),key=lambda p:int(p.stem.split('-')[1])):
-    frame=int(png.stem.split('-')[1]); scene=next(s for s in scenes if s['start_frame']<=frame<s['end_frame'])
+    frame=int(png.stem.split('-')[1])
+    scene=next(s for s in scenes if s['start_frame']<=frame<s['end_frame'])
     active=[e for e in events if e['timing']['start_frame']<=frame<e['timing']['end_frame']]
     primary=next(i for i in priorities if i in scene['shared_component_ids'])
     caption=next((c for c in cues if c['start_ms']<=frame/30*1000<c['end_ms']),None)
-    digest=hashlib.sha256(png.read_bytes()).hexdigest(); primary_bounds={'x':248,'y':164,'width':1424,'height':520}
-    current=event_value(active[0],frame) if active else None; before=active[0]['target_initial_value'] if active else None
-    if active and expected_peaks.get(active[0]['event_id'])==frame and current != before: peak_delta[active[0]['event_id']]=True
+    digest=hashlib.sha256(png.read_bytes()).hexdigest()
+    deviation=float(subprocess.check_output(['identify','-format','%[fx:standard_deviation]',str(png)],text=True))
+    assert deviation > 0.005
+    primary_bounds={'x':248,'y':164,'width':1424,'height':520}
     geometry=scene['caption_safe_geometry']
+    left=geometry.get('left',176); right=geometry.get('right',176); top=geometry['caption_top']; bottom=geometry['bottom']
+    caption_bounds={'x':left,'y':top,'width':1920-left-right,'height':max(1,bottom-top)}
     assert primary_bounds['y']+primary_bounds['height'] <= geometry['bottom']
     assert geometry['caption_top']-geometry['bottom'] >= geometry['clearance']
     assert scene['contact_shadow_policy']['required'] is True
     assert sum(bool(scene[k]) for k in ('foreground_layer','midground_layer','background_layer')) >= (3 if scene['premium_tier']=='C_PREMIUM' else 2 if scene['premium_tier']=='B_STRONG' else 1)
-    frames.append({'composition_id':'GoldS01PremiumFirst120s','production_runtime_head':os.environ['PRODUCTION_RUNTIME_HEAD'],'compiler_artifact_id':int(os.environ['COMPILER_ARTIFACT_ID']),'frame':frame,'scene_id':scene['scene_id'],'event_ids':[e['event_id'] for e in active],'target_object_id':active[0]['target_id'] if active else None,'target_property':active[0]['target_property'] if active else None,'property_before':before,'property_after':current,'handler_id':active[0]['handler_id'] if active else None,'telemetry_probe':active[0]['telemetry_probe'] if active else None,'semantic_anchor':active[0]['timing']['semantic_anchor'] if active else None,'asset_ids':scene['asset_ids'],'primary_surface_id':primary,'camera_preset_id':scene['camera_preset_id'],'lens_profile_id':scene['lens_profile_id'],'lighting_rig_id':scene['lighting_rig_id'],'material_profile_ids':scene['material_profile_ids'],'texture_profile_ids':scene['texture_profile_ids'],'color_grade_id':scene['color_grade_id'],'ambient_life_ids':scene['ambient_life_ids'],'primary_focus_bounds':primary_bounds,'caption_bounds':geometry,'caption_active':caption is not None,'frame_sha256':digest,'generic_asset_grid_count':0})
-assert all(peak_delta.values()), peak_delta
-assert frames[0]['frame']==0 and frames[-1]['frame']==3599
-receipt={'schema_version':'gold_s01_component_evidence.v2','frames':frames,'qc':{'FRAME_ZERO_LAYOUT':'PASS','SCENE_CONTINUITY':'PASS','PRIMARY_FOCUS_BOUNDS':'PASS','CAPTION_CLEARANCE':'PASS','CONTACT_SHADOW_EVIDENCE':'PASS','DEPTH_LAYER_EVIDENCE':'PASS','EVENT_TARGET_DELTA':'PASS','NO_GENERIC_GRID':'PASS','NO_BLANK_FRAME':'PASS'},'media_render_started':False,'no_fake_green':True}
-out=work/'component-evidence/component-evidence-receipt.json'; out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
-PY
-python3 - <<'PY'
-import json, os
-from pathlib import Path
-root=Path(os.environ['WORK'])/'component-evidence'
-d=json.loads((root/'component-evidence-receipt.json').read_text())
-d['frames']=[frame for frame in d['frames'] if frame['frame'] != 44]
-(root/'component-evidence-validator-input.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+    rendered_text=visible_text(scene)
+    png_ascii=png.read_bytes().decode('latin1',errors='ignore')
+    internal_id_leak=bool(internal_id_pattern.search(rendered_text) or internal_id_pattern.search(png_ascii))
+    debug_metadata_leak=bool(debug_pattern.search(rendered_text) or debug_pattern.search(png_ascii))
+    assert internal_id_leak is False, (frame,rendered_text)
+    assert debug_metadata_leak is False, (frame,rendered_text)
+    frames.append({'frame':frame,'composition_id':'GoldS01PremiumFirst120s','production_runtime_head':os.environ['PRODUCTION_RUNTIME_HEAD'],'frame_sha256':digest,'standard_deviation':deviation,'generic_asset_grid_count':0,'primary_focus_bounds':primary_bounds,'caption_bounds':caption_bounds,'internal_id_leak':False,'debug_metadata_leak':False,'camera_preset_id':scene['camera_preset_id'],'lens_profile_id':scene['lens_profile_id'],'lighting_rig_id':scene['lighting_rig_id'],'material_profile_ids':scene['material_profile_ids'],'texture_profile_ids':scene['texture_profile_ids'],'ambient_life_ids':scene['ambient_life_ids'],'caption_active':caption is not None,'event_ids':[e['event_id'] for e in active],'asset_ids':scene['asset_ids'],'scene_id':scene['scene_id'],'primary_surface_id':primary})
+assert [frame['frame'] for frame in frames]==required_frames
+by_frame={frame['frame']:frame for frame in frames}
+for event_id,probe in probes.items():
+    event=next(e for e in events if e['event_id']==event_id)
+    peak=by_frame[probe['peak']]
+    before=event['target_initial_value']; after=event_value(event,probe['peak'])
+    frame_hashes={position:by_frame[number]['frame_sha256'] for position,number in probe.items()}
+    telemetry_complete=all((event.get('handler_id'),event.get('target_id'),event.get('target_property'),event.get('timing',{}).get('semantic_anchor'))) and before != after and all(re.fullmatch(r'[0-9a-f]{64}',value) for value in frame_hashes.values())
+    assert telemetry_complete is True, event_id
+    peak.update({'handler_id':event['handler_id'],'target_object_id':event['target_id'],'target_property':event['target_property'],'semantic_anchor':event['timing']['semantic_anchor'],'property_before':before,'property_after':after,'telemetry_complete':True,'frame_hashes':frame_hashes})
+receipt={'schema_version':'gold_s01_component_evidence.v3','runner_head':os.environ['GITHUB_SHA'],'caption_artifact_id':int(os.environ['CAPTION_ARTIFACT_ID']),'frames':frames,'qc':{'FRAME_ZERO_LAYOUT':'PASS','SCENE_CONTINUITY':'PASS','PRIMARY_FOCUS_BOUNDS':'PASS','CAPTION_CLEARANCE':'PASS','CONTACT_SHADOW_EVIDENCE':'PASS','DEPTH_LAYER_EVIDENCE':'PASS','EVENT_TARGET_DELTA':'PASS','NO_GENERIC_GRID':'PASS','NO_BLANK_FRAME':'PASS','NO_INTERNAL_DEBUG_IDS':'PASS'},'media_render_started':False,'no_fake_green':True}
+out=work/'component-evidence/component-evidence-receipt.json'
+out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
 PY
 python3 scripts/gold_s01_canonical_pre_render_v2.py verify-component-receipt \
-  --receipt-path "$WORK/component-evidence/component-evidence-validator-input.json" \
+  --receipt-path "$WORK/component-evidence/component-evidence-receipt.json" \
+  --expected-runner-head "$GITHUB_SHA" \
+  --expected-caption-artifact-id "$CAPTION_ARTIFACT_ID" \
   --output "$WORK/component-evidence/component-validation-receipt.json"
