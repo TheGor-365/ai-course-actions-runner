@@ -37,7 +37,7 @@ import json, os
 from pathlib import Path
 root=Path(os.environ['WORK'])
 d=json.loads((root/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
-captions=next(d[k] for k in ('blocks','captions','segments','cues') if isinstance(d.get(k),list))
+captions=next(d[k] for k in ('caption_blocks','blocks','captions','segments','cues') if isinstance(d.get(k),list))
 props={'audioSrc':(root/'M1_L01_S01_RU_A3483_voice_sfx_mix_v01.wav').resolve().as_uri(),'captions':captions,'acceptedTimingSha256':os.environ['ACCEPTED_TIMING_SHA256'],'captionJsonSha256':os.environ['ACCEPTED_CAPTION_JSON_SHA256'],'captionVttSha256':os.environ['CAPTION_VTT_SHA256']}
 (root/'props.json').write_text(json.dumps(props,ensure_ascii=False),encoding='utf-8')
 PY
@@ -58,7 +58,7 @@ compiled=work/'production/03_modules/M1/L01/04_render_migration/gold_s01_visual_
 scenes=json.loads((compiled/'resolved_premium_scene_ir.json').read_text(encoding='utf-8'))['records']
 events=json.loads((compiled/'resolved_event_scene_binding.json').read_text(encoding='utf-8'))['records']
 captions=json.loads((work/'captions/s01_ru_final_captions_v01.json').read_text(encoding='utf-8'))
-cues=next(captions[k] for k in ('blocks','captions','segments','cues') if isinstance(captions.get(k),list))
+cues=next(captions[k] for k in ('caption_blocks','blocks','captions','segments','cues') if isinstance(captions.get(k),list))
 priorities=['course.editor.shell.v1','course.diagram.checkpoint.v1','course.diagram.input_process_output.v1','course.diagram.comparison.v1','course.diagram.timeline.v1','course.diagram.cause_effect.v1','course.code.line_focus.v1','course.code.code_to_object_binding.v1']
 expected_peaks={'VE_001':44,'VE_002':589,'VE_003':2013,'VE_004':2861}
 def event_value(event, frame):
