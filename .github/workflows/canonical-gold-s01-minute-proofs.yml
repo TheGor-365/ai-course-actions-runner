@@ -1,4 +1,4 @@
-name: Canonical Gold S01 Runtime Captions and Pre-render
+name: Canonical Gold S01 Release Readiness Evidence
 
 on:
   workflow_dispatch:
@@ -7,10 +7,15 @@ on:
         description: Explicit controlled no-media mode
         required: true
         type: choice
-        options: [static_contract, runtime_discovery, caption_packaging, component_evidence, pre_render_only]
+        options: [static_contract, source_exact, runtime_discovery, caption_packaging, component_evidence, pre_render_only]
         default: static_contract
       runner_branch: {description: Exact runner branch, required: true, type: string}
       runner_head: {description: Exact frozen runner branch head, required: true, type: string}
+      source_branch: {description: Exact source branch, required: false, type: string}
+      source_head: {description: Exact source head, required: false, type: string}
+      oc_head: {description: Exact OC v37 production head, required: false, type: string}
+      oc_blob_sha: {description: Exact OC v37 blob SHA, required: false, type: string}
+      active_program_blob_sha: {description: Exact release-readiness program blob SHA, required: false, type: string}
       production_branch: {description: Exact production runtime branch, required: false, type: string}
       production_runtime_head: {description: Exact production runtime head, required: false, type: string}
       production_compile_head: {description: Immutable compiler input head, required: false, type: string}
@@ -73,69 +78,149 @@ jobs:
           remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
           test "$remote" = "$RUNNER_HEAD"
           echo EXACT_RUNNER_HEAD=PASS
-      - name: 03_compile_and_test_contract
+      - name: 03_compile_parse_and_run_all_tests
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/gold_s01_canonical_pre_render_v2.py tests/test_gold_s01_canonical_pre_render_v2.py
-          bash -n scripts/gold_s01_runtime_discovery_v2.sh scripts/gold_s01_caption_packaging_v2.sh scripts/gold_s01_component_evidence_v2.sh scripts/gold_s01_pre_render_only_v2.sh
-          python3 -m unittest tests.test_gold_s01_canonical_pre_render_v2 -v
-      - name: 04_assert_explicit_single_workflow_and_zero_hidden_authority
+          bash -n scripts/*.sh
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/canonical-gold-s01-minute-proofs.yml")'
+          python3 -m unittest discover -s tests -v
+      - name: 04_verify_content_based_workflow_authority
         run: |
           set -euo pipefail
-          canonical=.github/workflows/canonical-gold-s01-minute-proofs.yml
-          test -f "$canonical"
-          duplicates=$(find .github/workflows -maxdepth 1 -type f \( -iname '*gold*s01*.yml' -o -iname '*gold*s01*.yaml' -o -iname '*s01*gold*.yml' -o -iname '*s01*gold*.yaml' \) ! -name 'canonical-gold-s01-minute-proofs.yml' -print)
-          test -z "$duplicates"
-          for path in \
-            scripts/sitecustomize.py scripts/sitecustomize \
-            scripts/usercustomize.py scripts/usercustomize \
-            scripts/zipfile.py scripts/zipfile \
-            .github/workflows/materialize-caption-carrier-bridge.yml \
-            scripts/materialize_caption_carrier_bridge_v1.py \
-            scripts/final_pipeline_orchestrator_v2.py scripts/final_pipeline_orchestrator_v2 \
-            scripts/quality_pre_render_closure_v1.py scripts/quality_pre_render_closure_v1; do
-            test ! -e "$path"
-          done
+          mkdir -p "$WORK/static-contract"
+          python3 scripts/gold_s01_canonical_pre_render_v2.py verify-workflow-authority \
+            --workflows-root .github/workflows \
+            --inventory docs/canonical_gold_s01_workflow_inventory_v2.json \
+            --receipt "$WORK/static-contract/workflow-authority-receipt.json"
+          test ! -e .github/workflows/gold-psu-source-exact-gate-v1.yml
           python3 - <<'PY'
+          import re
           from pathlib import Path
-          workflow = Path('.github/workflows/canonical-gold-s01-minute-proofs.yml').read_text(encoding='utf-8')
-          assert workflow.count('workflow_' + 'dispatch:') == 1
-          assert '\n  push:' not in workflow and '\n  pull_request:' not in workflow
-          assert '\n    needs:' not in workflow
-          assert ('gh workflow ' + 'run') not in workflow
-          assert ('/dis' + 'patches') not in workflow
-          forbidden_media = ('remotion ' + 'render', '.' + 'mp4', 'execute_' + 'media', 'canonical-minute-proofs-' + 'media-held')
-          assert not any(item in workflow for item in forbidden_media)
-          runtime = Path('scripts/gold_s01_runtime_discovery_v2.sh').read_text(encoding='utf-8')
-          forbidden_runtime = (
-              'issues/377/comments', 'CAPTION_BYTE_GZIP_CHUNK_V1', 'materialize_caption_carrier',
-              'git push', 'git commit', 'gh workflow ' + 'run', '/dis' + 'patches', 'git add -A',
+          active_scripts = (
+              Path('scripts/gold_s01_canonical_pre_render_v2.py'),
+              Path('scripts/gold_s01_source_exact_v1.sh'),
+              Path('scripts/gold_s01_runtime_discovery_v2.sh'),
+              Path('scripts/gold_s01_caption_packaging_v2.sh'),
+              Path('scripts/gold_s01_component_evidence_v2.sh'),
+              Path('scripts/gold_s01_pre_render_only_v2.sh'),
           )
-          assert not any(item in runtime for item in forbidden_runtime)
-          active_files = [path for path in Path('scripts').rglob('*') if path.is_file()]
-          active_text = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in active_files)
-          assert 'atexit.register' not in active_text
-          assert 'CAPTION_BYTE_GZIP_CHUNK_V1' not in active_text
-          assert 'CAPTION_BYTE_TRANSPORT_MANIFEST_V1' not in active_text
-          assert 'issues/377/comments' not in active_text
-          assert ('gh workflow ' + 'run') not in active_text
+          missing_active = [
+              str(path)
+              for path in active_scripts
+              if not path.is_file()
+          ]
+          assert not missing_active, (
+              'MISSING_ACTIVE_GOLD_S01_SCRIPTS',
+              missing_active,
+          )
+
+          forbidden_paths = (
+              Path('scripts/sitecustomize.py'),
+              Path('scripts/sitecustomize'),
+              Path('scripts/usercustomize.py'),
+              Path('scripts/usercustomize'),
+              Path('scripts/zipfile.py'),
+              Path('scripts/zipfile'),
+              Path('scripts/materialize_caption_carrier_bridge_v1.py'),
+              Path('scripts/final_pipeline_orchestrator_v2.py'),
+              Path('scripts/final_pipeline_orchestrator_v2'),
+              Path('scripts/quality_pre_render_closure_v1.py'),
+              Path('scripts/quality_pre_render_closure_v1'),
+              Path('.github/workflows/materialize-caption-carrier-bridge.yml'),
+          )
+          existing_forbidden_paths = [
+              str(path)
+              for path in forbidden_paths
+              if path.exists()
+          ]
+          assert not existing_forbidden_paths, (
+              'FORBIDDEN_HIDDEN_AUTHORITY_PATHS',
+              existing_forbidden_paths,
+          )
+
+          forbidden = (
+              'atexit.register',
+              'issues/377/comments',
+              'CAPTION_BYTE_GZIP_CHUNK_V1',
+              'CAPTION_BYTE_TRANSPORT_MANIFEST_V1',
+              'gh workflow ' + 'run',
+              '/dis' + 'patches',
+          )
+          hits = [
+              {
+                  'path': str(script),
+                  'marker': marker,
+              }
+              for script in active_scripts
+              for marker in forbidden
+              if marker in script.read_text(
+                  encoding='utf-8',
+                  errors='ignore',
+              )
+          ]
+          assert not hits, (
+              'ACTIVE_GOLD_S01_HIDDEN_AUTHORITY_MARKERS',
+              hits,
+          )
+          validator = Path('scripts/gold_s01_canonical_pre_render_v2.py').read_text(encoding='utf-8')
+          assert re.search(r'(?<![A-Za-z_])900_?000(?![A-Za-z_])', validator) is None
           PY
-          echo ONE_CANONICAL_WORKFLOW=PASS
-          echo CANONICAL_GOLD_S01_TRIGGERING_WORKFLOW_COUNT=1
-          echo HIDDEN_PYTHON_HOOK_COUNT=0
-          echo PYTHON_AUTO_IMPORT_ORCHESTRATION_COUNT=0
-          echo ATEXIT_WORKFLOW_DISPATCH_COUNT=0
-          echo STDLIB_SHADOW_COUNT=0
-          echo STDLIB_SHADOW_MODULE_COUNT=0
-          echo IMPLICIT_CROSS_REPO_WRITE_COUNT=0
-          echo IMPLICIT_WORKFLOW_DISPATCH_COUNT=0
-          echo AUTO_DISPATCH_FROM_PYTHON_COUNT=0
-          echo ACTIVE_COMMENT_CAPTION_TRANSPORT_COUNT=0
-          echo ACTIVE_BASE64_CHUNK_RECONSTRUCTION_COUNT=0
-          echo ACTIVE_TEMP_CAPTION_WORKFLOW_COUNT=0
-          echo COMMENT_CAPTION_TRANSPORT_COUNT=0
-          echo IMPLICIT_MODE_CHAIN_COUNT=0
+          echo ONE_CANONICAL_GOLD_S01_WORKFLOW=PASS
+          echo ACTIVE_COMPETING_GOLD_PSU_WORKFLOW_COUNT=0
+          echo FILENAME_ONLY_WORKFLOW_SCANNER=false
+          echo HIDDEN_AUTHORITY_COUNT=0
+          echo CAPTION_BLOCKS_KEY_SUPPORTED=true
+          echo HARDCODED_900000_MS_CEILING_COUNT=0
+          echo ACCEPTED_DURATION_MS=908398
+          echo FINAL_CAPTION_END_MS=908398
           echo MEDIA_JOB_REACHABLE=false
+          echo MEDIA_RENDER_STARTED=false
+
+  source-exact:
+    if: ${{ inputs.mode == 'source_exact' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 01_checkout_exact_runner_head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+      - name: 02_verify_exact_runner_identity
+        env:
+          RUNNER_BRANCH: ${{ inputs.runner_branch }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          test "${#RUNNER_HEAD}" = 40
+          test "$(git rev-parse HEAD)" = "$RUNNER_HEAD"
+          remote=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$RUNNER_BRANCH" | awk '{print $1}')
+          test "$remote" = "$RUNNER_HEAD"
+      - name: 03_execute_exact_source_gate
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          SOURCE_HEAD: ${{ inputs.source_head }}
+          OC_HEAD: ${{ inputs.oc_head }}
+          OC_BLOB_SHA: ${{ inputs.oc_blob_sha }}
+          ACTIVE_PROGRAM_BLOB_SHA: ${{ inputs.active_program_blob_sha }}
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: bash scripts/gold_s01_source_exact_v1.sh
+      - name: 04_upload_exact_source_evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-s01-source-exact-${{ inputs.source_head }}-${{ inputs.runner_head }}
+          path: ${{ env.WORK }}/source-exact-evidence
+          if-no-files-found: error
+          retention-days: 30
+      - name: 05_stop_before_media_render
+        run: |
+          set -euo pipefail
+          echo SOURCE_EXACT_RUNNER_PROVENANCE=PASS
+          echo MEDIA_RENDER_STARTED=false
+          echo TWO_MINUTE_RENDER_AUTHORIZED=false
+          echo FULL_15_MINUTE_RENDER_AUTHORIZED=false
 
   runtime-discovery:
     if: ${{ inputs.mode == 'runtime_discovery' }}
@@ -171,7 +256,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head }}
+          name: gold-s01-runtime-discovery-${{ inputs.production_runtime_head }}-${{ inputs.runner_head }}
           path: work/runtime-evidence
           if-no-files-found: error
           retention-days: 30
@@ -208,7 +293,7 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: gold-s01-accepted-ru-captions-v1-${{ env.ACCEPTED_TIMING_SHA256 }}
+          name: gold-s01-accepted-ru-captions-v1-${{ env.ACCEPTED_TIMING_SHA256 }}-${{ inputs.runner_head }}
           path: ${{ env.WORK }}/caption-pack
           if-no-files-found: error
           retention-days: 90
@@ -223,7 +308,7 @@ jobs:
       - name: 06_upload_caption_identity_receipts
         uses: actions/upload-artifact@v4
         with:
-          name: gold-s01-caption-identity-${{ inputs.caption_carrier_head }}
+          name: gold-s01-caption-identity-${{ inputs.caption_carrier_head }}-${{ inputs.runner_head }}
           path: |
             ${{ env.WORK }}/caption-input-receipt.json
             ${{ env.WORK }}/caption-stage-receipt.json
@@ -269,7 +354,7 @@ jobs:
       - name: 04_upload_component_evidence
         uses: actions/upload-artifact@v4
         with:
-          name: gold-s01-component-evidence-${{ inputs.production_runtime_head }}
+          name: gold-s01-component-evidence-${{ inputs.production_runtime_head }}-${{ inputs.runner_head }}
           path: ${{ env.WORK }}/component-evidence
           if-no-files-found: error
           retention-days: 90

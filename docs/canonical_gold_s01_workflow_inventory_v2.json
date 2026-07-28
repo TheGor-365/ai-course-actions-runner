@@ -1,32 +1,73 @@
 {
-  "schema_version": "canonical_gold_s01_workflow_inventory.v2",
+  "schema_version": "canonical_gold_s01_workflow_inventory.v3",
   "repository": "TheGor-365/ai-course-actions-runner",
-  "observed_pr": 19,
-  "observed_head": "65a124cdbb5e3a0580a42e887bd59c3e4634d9e6",
-  "successor_branch": "worker/canonical-gold-s01-minute-proofs-v2",
+  "observed_predecessor_pr": 22,
+  "observed_predecessor_head": "8f9ae635209021bf09a1f9dc17b40aacc391af0f",
+  "successor_work_order": "RWO-GOLD-S01-RUNNER-CAPTION-AUTHORITY-REPAIR-001",
+  "successor_issue": "production#382",
+  "successor_branch": "worker/m1-l01-s01-runner-release-readiness-v1",
   "canonical_workflow": ".github/workflows/canonical-gold-s01-minute-proofs.yml",
+  "canonical_modes": [
+    "static_contract",
+    "source_exact",
+    "runtime_discovery",
+    "caption_packaging",
+    "component_evidence",
+    "pre_render_only"
+  ],
   "canonical_trigger": "workflow_dispatch_only",
-  "one_canonical_minute_workflow": true,
-  "duplicate_triggering_workflow_count": 0,
+  "exact_live_head_verified_at_runtime": true,
+  "self_referential_containing_commit_forbidden": true,
+  "final_successor_head_embedded": false,
+  "one_canonical_gold_s01_workflow": true,
+  "active_competing_gold_psu_workflow_count": 0,
+  "workflow_inventory_stale_reference_count": 0,
+  "broken_successor_pointer_count": 0,
   "inventory": [
-    {"workflow_path":".github/workflows/canonical-gold-negative-fixtures-v1.yml","status":"DELETE","trigger":"push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy helper","legacy_reason":"stale provisional source head; separate trigger duplicates canonical contour","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-psu-final-no-render-v1.yml","status":"DELETE","trigger":"push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy helper","legacy_reason":"stale source/production heads; partial no-render contour","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-psu-inventory-v1.yml","status":"DELETE","trigger":"pull_request:launch/factory-5d + push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy helper","legacy_reason":"duplicate commit trigger and stale exact heads","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-psu-tree-snapshot-v1.yml","status":"DELETE","trigger":"push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy helper","legacy_reason":"snapshot-only workflow duplicates execution authority","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-s01-final-media-preflight-v1.yml","status":"DELETE","trigger":"push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy preflight","legacy_reason":"superseded by exact A-E gate","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-s01-final-media-preflight-v2.yml","status":"DELETE","trigger":"push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 legacy preflight","legacy_reason":"caption artifact variables present but no exact VTT identity and no lane A-E receipt binding","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-s01-minute-proofs-v1.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"manual dead-end successor chain","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/canonical-gold-s01-minute-proofs-v2.yml","status":"DELETE","trigger":"pull_request:launch/factory-5d + push:repair/m1-l01-s01-canonical-minute-runner-v1 + workflow_dispatch","current_authority":"PR#19 current provisional workflow","legacy_reason":"provisional heads; partial stage model; no exact A-E receipt set; VTT hash not enforced","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-private-preview-gate.yml","status":"DELETE","trigger":"pull_request + push:repair/gold-s01-private-preview-runner-v1","current_authority":"legacy private-host contour","legacy_reason":"OC v35 authorizes public GitHub-hosted runner as primary","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-media-render.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"legacy auto-full-render lineage","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-exact-v1.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded pilot path","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-observer-v1.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"observer/restart contour superseded","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v2.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v3.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v4.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v5.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v6.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/gold-s01-public-pilot-pr-v7.yml","status":"DELETE","trigger":"workflow_dispatch","current_authority":"retired stub","legacy_reason":"superseded montage/pilot iteration","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"},
-    {"workflow_path":".github/workflows/runner-infrastructure-self-test.yml","status":"DELETE","trigger":"pull_request:.github/workflows/** and runner paths + selected push branches","current_authority":"generic legacy infrastructure workflow","legacy_reason":"would trigger on the same workflow commit; covered by local deterministic tests and canonical workflow preflight","successor":".github/workflows/canonical-gold-s01-minute-proofs.yml"}
+    {
+      "workflow_path": ".github/workflows/canonical-gold-s01-minute-proofs.yml",
+      "classification": "canonical_release_readiness_authority",
+      "active": true,
+      "trigger": "workflow_dispatch",
+      "modes": ["static_contract", "source_exact", "runtime_discovery", "caption_packaging", "component_evidence", "pre_render_only"]
+    },
+    {
+      "workflow_path": ".github/workflows/gold-psu-source-exact-gate-v1.yml",
+      "classification": "removed_standalone_source_gate",
+      "active": false,
+      "historical_trigger": "push+pull_request+workflow_dispatch",
+      "historical_run_ids_preserved": [30257495489, 30262554150, 30267204030],
+      "successor": ".github/workflows/canonical-gold-s01-minute-proofs.yml#source_exact"
+    },
+    {
+      "workflow_path": ".github/workflows/canonical-gold-s01-minute-proofs-v1.yml",
+      "classification": "historical_deleted_workflow",
+      "active": false,
+      "successor": ".github/workflows/canonical-gold-s01-minute-proofs.yml"
+    },
+    {
+      "workflow_path": ".github/workflows/canonical-gold-s01-minute-proofs-v2.yml",
+      "classification": "historical_deleted_workflow",
+      "active": false,
+      "successor": ".github/workflows/canonical-gold-s01-minute-proofs.yml"
+    },
+    {
+      "workflow_path": ".github/workflows/canonical-gold-s01-final-media-preflight-v1.yml",
+      "classification": "historical_deleted_workflow",
+      "active": false,
+      "successor": ".github/workflows/canonical-gold-s01-minute-proofs.yml"
+    },
+    {
+      "workflow_path": ".github/workflows/canonical-gold-s01-final-media-preflight-v2.yml",
+      "classification": "historical_deleted_workflow",
+      "active": false,
+      "successor": ".github/workflows/canonical-gold-s01-minute-proofs.yml"
+    },
+    {
+      "workflow_path": ".github/workflows/runner-infrastructure-self-test.yml",
+      "classification": "unrelated_generic_historical_workflow",
+      "active": false,
+      "gold_release_authority": false
+    }
   ]
 }

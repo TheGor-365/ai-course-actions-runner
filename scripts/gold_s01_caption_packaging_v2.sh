@@ -33,7 +33,28 @@ elif [ "$mode" = verify-download ]; then
   python3 - <<PY
 import json, os
 from pathlib import Path
-d={'schema_version':'gold_s01_caption_public_artifact_receipt.v2','caption_carrier_head':os.environ['CAPTION_CARRIER_HEAD'],'accepted_audio_execution_head':os.environ['ACCEPTED_AUDIO_HEAD'],'caption_json_sha256':os.environ['ACCEPTED_CAPTION_JSON_SHA256'],'caption_vtt_sha256':os.environ['CAPTION_VTT_SHA256'],'caption_artifact_id':int(os.environ['CAPTION_ARTIFACT_ID']),'caption_artifact_archive_sha256':'$archive_sha','caption_artifact_run_id':int(os.environ['GITHUB_RUN_ID']),'caption_artifact_job_id':int('$job_id'),'caption_download_identity':'PASS','media_render_started':False,'no_fake_green':True}
+d={
+  'schema_version':'gold_s01_caption_public_artifact_receipt.v3',
+  'result':'PASS',
+  'runner_head':os.environ['GITHUB_SHA'],
+  'caption_carrier_head':os.environ['CAPTION_CARRIER_HEAD'],
+  'accepted_audio_execution_head':os.environ['ACCEPTED_AUDIO_HEAD'],
+  'accepted_timing_sha256':os.environ['ACCEPTED_TIMING_SHA256'],
+  'caption_json_sha256':os.environ['ACCEPTED_CAPTION_JSON_SHA256'],
+  'caption_vtt_sha256':os.environ['CAPTION_VTT_SHA256'],
+  'accepted_duration_ms':908398,
+  'final_caption_end_ms':908398,
+  'caption_file_count':5,
+  'caption_json_block_count':13,
+  'caption_vtt_cue_count':13,
+  'caption_artifact_id':int(os.environ['CAPTION_ARTIFACT_ID']),
+  'caption_artifact_archive_sha256':'$archive_sha',
+  'caption_artifact_run_id':int(os.environ['GITHUB_RUN_ID']),
+  'caption_artifact_job_id':int('$job_id'),
+  'caption_download_identity':'PASS',
+  'media_render_started':False,
+  'no_fake_green':True,
+}
 Path(os.environ['WORK'],'caption-public-artifact-receipt.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
 PY
 else
