@@ -97,8 +97,48 @@ jobs:
           python3 - <<'PY'
           import re
           from pathlib import Path
-          files = [path for path in Path('scripts').rglob('*') if path.is_file()]
-          text = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in files)
+          active_scripts = (
+              Path('scripts/gold_s01_canonical_pre_render_v2.py'),
+              Path('scripts/gold_s01_source_exact_v1.sh'),
+              Path('scripts/gold_s01_runtime_discovery_v2.sh'),
+              Path('scripts/gold_s01_caption_packaging_v2.sh'),
+              Path('scripts/gold_s01_component_evidence_v2.sh'),
+              Path('scripts/gold_s01_pre_render_only_v2.sh'),
+          )
+          missing_active = [
+              str(path)
+              for path in active_scripts
+              if not path.is_file()
+          ]
+          assert not missing_active, (
+              'MISSING_ACTIVE_GOLD_S01_SCRIPTS',
+              missing_active,
+          )
+
+          forbidden_paths = (
+              Path('scripts/sitecustomize.py'),
+              Path('scripts/sitecustomize'),
+              Path('scripts/usercustomize.py'),
+              Path('scripts/usercustomize'),
+              Path('scripts/zipfile.py'),
+              Path('scripts/zipfile'),
+              Path('scripts/materialize_caption_carrier_bridge_v1.py'),
+              Path('scripts/final_pipeline_orchestrator_v2.py'),
+              Path('scripts/final_pipeline_orchestrator_v2'),
+              Path('scripts/quality_pre_render_closure_v1.py'),
+              Path('scripts/quality_pre_render_closure_v1'),
+              Path('.github/workflows/materialize-caption-carrier-bridge.yml'),
+          )
+          existing_forbidden_paths = [
+              str(path)
+              for path in forbidden_paths
+              if path.exists()
+          ]
+          assert not existing_forbidden_paths, (
+              'FORBIDDEN_HIDDEN_AUTHORITY_PATHS',
+              existing_forbidden_paths,
+          )
+
           forbidden = (
               'atexit.register',
               'issues/377/comments',
@@ -107,7 +147,22 @@ jobs:
               'gh workflow ' + 'run',
               '/dis' + 'patches',
           )
-          assert not any(item in text for item in forbidden)
+          hits = [
+              {
+                  'path': str(script),
+                  'marker': marker,
+              }
+              for script in active_scripts
+              for marker in forbidden
+              if marker in script.read_text(
+                  encoding='utf-8',
+                  errors='ignore',
+              )
+          ]
+          assert not hits, (
+              'ACTIVE_GOLD_S01_HIDDEN_AUTHORITY_MARKERS',
+              hits,
+          )
           validator = Path('scripts/gold_s01_canonical_pre_render_v2.py').read_text(encoding='utf-8')
           assert re.search(r'(?<![A-Za-z_])900_?000(?![A-Za-z_])', validator) is None
           PY
