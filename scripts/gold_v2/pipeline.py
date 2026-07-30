@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .authority import validate_manifest
-from .common import MODE_RANK, RunnerError, canonical_json_bytes, consume_single_use, load_json, scan_sensitive, sha256_file
+from .common import (
+    MODE_RANK, RunnerError, canonical_json_bytes, consume_single_use, load_json,
+    safe_error_code, scan_sensitive, scrub_transport_environment, sha256_bytes, sha256_file,
+)
 from .gitops import assert_clean, checkout_exact, git_blob_sha, run_command, verify_bound_file, verify_remote_branch_tip
 from .stages import StageMixin
 
@@ -49,6 +51,23 @@ class GoldV2Pipeline(StageMixin):
         self.repos[key] = path
         self.receipt.setdefault("exact_head_leases", {})[key] = receipt
 
+    def _fresh_checkout(self, key: str, destination: Path, lease_name: str) -> Path:
+        if key == "compiler":
+            repository, head, ancestor = (
+                self.manifest["production_repository"], self.manifest["compiler_head"],
+                self.manifest.get("compiler_required_ancestor"),
+            )
+        elif key == "runtime":
+            repository, head, ancestor = (
+                self.manifest["production_repository"], self.manifest["runtime_head"],
+                self.manifest.get("runtime_required_ancestor"),
+            )
+        else:
+            raise RunnerError(f"FRESH_CHECKOUT_KEY_INVALID:{key}")
+        lease = checkout_exact(self._repo_url(repository), head, destination, required_ancestor=ancestor)
+        self.receipt.setdefault("exact_head_leases", {})[lease_name] = lease
+        return destination
+
     def _checkout_repositories(self) -> None:
         self._checkout("control", self.manifest["control_repository"], self.manifest["control_head"])
         verify_remote_branch_tip(self.repos["control"], self.manifest["control_branch"], self.manifest["control_head"])
@@ -69,7 +88,8 @@ class GoldV2Pipeline(StageMixin):
                 self.repos["runtime"] = self.repos["production"]
             else:
                 self._checkout("runtime", self.manifest["production_repository"], self.manifest["runtime_head"], self.manifest.get("runtime_required_ancestor"))
-        self._stage("exact_head_checkouts", repository_count=len(self.repos))
+        scrub_transport_environment()
+        self._stage("exact_head_checkouts", repository_count=len(self.repos), transport_credentials_scrubbed=True)
 
     def _verify_oc(self) -> None:
         repo = self.repos["control"]
@@ -87,20 +107,21 @@ class GoldV2Pipeline(StageMixin):
         )
         missing = [marker for marker in markers if marker not in text]
         if missing:
-            raise RunnerError(f"OC_AUTHORIZATION_BINDING_MISSING:{missing}")
+            raise RunnerError("OC_AUTHORIZATION_BINDING_MISSING")
         self._stage("live_control", document_id=self.manifest["oc_document_id"], authorization_payload_sha256=self.manifest["authorization_payload_sha256"])
 
     def _verify_source_identity(self) -> None:
         package = self.repos["source"] / self.manifest["source_package_path"]
-        if not package.is_file():
+        if not package.is_file() or package.is_symlink():
             raise RunnerError("SOURCE_PACKAGE_MISSING")
         digest = sha256_file(package)
+        blob = git_blob_sha(self.repos["source"], self.manifest["source_package_path"])
         if digest != self.manifest["source_package_sha256"]:
             raise RunnerError("SOURCE_PACKAGE_SHA256_MISMATCH")
+        if blob != self.manifest["source_package_git_blob_sha"]:
+            raise RunnerError("SOURCE_PACKAGE_GIT_BLOB_SHA_MISMATCH")
         self.receipt["source_package"] = {
-            "path": self.manifest["source_package_path"],
-            "sha256": digest,
-            "git_blob_sha": git_blob_sha(self.repos["source"], self.manifest["source_package_path"]),
+            "path": self.manifest["source_package_path"], "sha256": digest, "git_blob_sha": blob,
         }
         self._stage("source_package_identity")
 
@@ -125,10 +146,19 @@ class GoldV2Pipeline(StageMixin):
         values.update(extra)
         return values
 
-    def _run_named(self, name: str, **values: str) -> dict[str, Any]:
-        receipt = run_command(self.manifest["commands"][name], self.repos, self._command_values(**values), self.workspace / "logs" / f"{name}.log")
-        self.receipt.setdefault("command_receipts", {})[name] = receipt
-        return receipt
+    def _run_named(self, name: str, *, receipt_key: str | None = None, log_name: str | None = None, **values: str) -> dict[str, Any]:
+        command = self.manifest["commands"][name]
+        log_relative = f"logs/{log_name or name}.log"
+        raw = run_command(command, self.repos, self._command_values(**values), self.workspace / log_relative)
+        normalized = {
+            "repo": raw["repo"],
+            "argv_template": list(command["argv"]),
+            "exit_code": raw["exit_code"],
+            "log_path": log_relative,
+            "log_sha256": raw["log_sha256"],
+        }
+        self.receipt.setdefault("command_receipts", {})[receipt_key or name] = normalized
+        return normalized
 
     def _validate_only(self) -> None:
         for name in ("source_materialize", "source_validate", "shared_id_validate", "schema_validate", "archive_prereq_validate"):
@@ -137,23 +167,29 @@ class GoldV2Pipeline(StageMixin):
                 assert_clean(repo)
         self._stage("validate_only")
 
+    def _write_receipt(self, name: str) -> Path:
+        payload = canonical_json_bytes(self.receipt)
+        self.receipt["receipt_payload_sha256"] = sha256_bytes(payload)
+        path = self.workspace / name
+        data = canonical_json_bytes(self.receipt)
+        scan_sensitive(name, data)
+        path.write_bytes(data)
+        return path
+
     def _finalize(self) -> Path:
         for repo in set(self.repos.values()):
             assert_clean(repo)
         self.receipt["result"] = "PASS"
         self.receipt["provenance"] = {
             "manifest_id": self.manifest["manifest_id"],
+            "authorization_payload_sha256": self.manifest["authorization_payload_sha256"],
             "control_head": self.manifest["control_head"],
             "source_head": self.manifest["source_head"],
             "shared_source_head": self.manifest["shared_source_head"],
             "production_head": self.manifest["production_head"],
             "runner_head": self.manifest["runner_head"],
         }
-        self.receipt["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-        path = self.workspace / "release_receipt.json"
-        path.write_bytes(canonical_json_bytes(self.receipt))
-        scan_sensitive("release_receipt.json", path.read_bytes())
-        return path
+        return self._write_receipt("release_receipt.json")
 
     def run(self) -> Path:
         if self.workspace.exists():
@@ -165,13 +201,15 @@ class GoldV2Pipeline(StageMixin):
                 raise RunnerError("EXECUTION_RUNNER_HEAD_MISMATCH")
             self.receipt["execution_runner_head"] = self.execution_runner_head
             self.receipt["manifest_id"] = self.manifest["manifest_id"]
+            self.receipt["authorization_payload_sha256"] = self.manifest["authorization_payload_sha256"]
             self.receipt["acceptance_state"] = self.manifest["acceptance_state"]
+            self._checkout_repositories()
+            self._verify_oc()
             if self.manifest.get("single_use_id"):
                 if self.single_use_ledger is None:
                     raise RunnerError("SINGLE_USE_LEDGER_REQUIRED")
                 consume_single_use(self.manifest["single_use_id"], self.single_use_ledger)
-            self._checkout_repositories()
-            self._verify_oc()
+                self._stage("single_use_authorization_consumed")
             self._verify_source_identity()
             self._verify_bindings()
             self._validate_only()
@@ -184,7 +222,6 @@ class GoldV2Pipeline(StageMixin):
             return self._finalize()
         except Exception as exc:
             self.receipt["result"] = "BLOCKED"
-            self.receipt["error"] = str(exc)
-            self.receipt["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-            (self.workspace / "blocked_receipt.json").write_bytes(canonical_json_bytes(self.receipt))
+            self.receipt["error_code"] = safe_error_code(exc)
+            self._write_receipt("blocked_receipt.json")
             raise
