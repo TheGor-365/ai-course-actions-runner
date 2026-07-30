@@ -1,0 +1,23 @@
+{
+  "schema_version": "gold_v2_runner_negative_fixture_catalog.v1",
+  "authority": "TEST_FIXTURES_ONLY_NON_AUTHORITY",
+  "cases": [
+    {"id": "unauthorized_compile", "expected_error": "MODE_NOT_AUTHORIZED:compile"},
+    {"id": "unauthorized_evidence", "expected_error": "MODE_NOT_AUTHORIZED:still_evidence"},
+    {"id": "unauthorized_render", "expected_error": "MODE_NOT_AUTHORIZED:render"},
+    {"id": "stale_control_head", "expected_error": "STALE_CONTROL_HEAD"},
+    {"id": "wrong_source_head", "expected_error": "SOURCE_HEAD_INVALID"},
+    {"id": "wrong_compiler_artifact", "expected_error": "COMPILER_ARTIFACT_SHA256_MISMATCH"},
+    {"id": "missing_runtime_head", "expected_error": "RUNTIME_HEAD_INVALID"},
+    {"id": "missing_sha256sums", "expected_error": "SHA256SUMS_MISSING"},
+    {"id": "extra_archive_file", "expected_error": "ARCHIVE_EXACT_FILE_SET_MISMATCH"},
+    {"id": "traversal", "expected_error": "ARCHIVE_MEMBER_PATH_UNSAFE"},
+    {"id": "symlink", "expected_error": "ARCHIVE_SYMLINK_FORBIDDEN"},
+    {"id": "secret", "expected_error": "SENSITIVE_MARKER_FORBIDDEN"},
+    {"id": "private_payload", "expected_error": "PRIVATE_PAYLOAD_PATH_FORBIDDEN"},
+    {"id": "provisional_head", "expected_error": "SOURCE_HEAD_INVALID"},
+    {"id": "preview_mislabeled_as_production", "expected_error": "PREVIEW_ACCEPTANCE_STATE_INVALID"},
+    {"id": "branch_name_authority_inference", "expected_error": "MODE_NOT_AUTHORIZED:compile"}
+  ],
+  "no_fake_green": true
+}
