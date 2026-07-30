@@ -37,11 +37,15 @@ jobs:
         shell: bash
         env:
           RUNNER_HEAD: ${{ inputs.runner_head }}
-          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
         run: |
           set -euo pipefail
           [[ "$RUNNER_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo "runner_head must be an exact lowercase commit SHA" >&2; exit 2; }
-          [[ "$WORKFLOW_REF" == *@"$RUNNER_HEAD" ]] || { echo "reusable workflow must be invoked at the same exact runner SHA" >&2; exit 2; }
+          [[ "$WORKFLOW_SHA" == "$RUNNER_HEAD" ]] || { echo "reusable workflow must be invoked at the same exact runner SHA" >&2; exit 2; }
+          [[ "$WORKFLOW_REPOSITORY" == "TheGor-365/ai-course-actions-runner" ]] || { echo "unexpected reusable workflow repository" >&2; exit 2; }
+          [[ "$WORKFLOW_FILE_PATH" == ".github/workflows/gold-v2-diamond-15min.yml" ]] || { echo "unexpected reusable workflow path" >&2; exit 2; }
 
       - name: Checkout exact runner head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
