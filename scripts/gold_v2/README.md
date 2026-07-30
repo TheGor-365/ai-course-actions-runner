@@ -2,55 +2,15 @@
 
 This directory is an execution/evidence layer. It is not source authority, production policy, quality acceptance authority, or coordinator authority.
 
-## Entry point
+The single entrypoint is `python3 scripts/gold_v2/runner.py`. Modes are `validate-only`, `compile`, `pre-render-evidence`, and `render`.
 
-```bash
-python3 scripts/gold_v2/runner.py \
-  --mode validate-only \
-  --authorization-manifest /absolute/path/authorization.json \
-  --workspace /absolute/path/new-workspace
-```
+Every mode requires an exact live-OC-bound authorization manifest. Source package identity includes exact repository head, relative path, SHA-256 and Git blob SHA. Higher modes require strict exact output file sets. Compiler reproducibility is checked in two independent detached exact-head checkouts. Preview artifacts are always `NON_ACCEPTED_RECORDING_CANDIDATE`; production artifacts are `ACCEPTED` only with exact quality/coordinator PASS receipts and no unresolved Human review gates.
 
-Modes are `validate-only`, `compile`, `pre-render-evidence`, and `render`. A higher mode never inherits permission from a branch, pull request, label, environment variable, previous run, artifact presence, deadline, or filename. The manifest must name the requested mode exactly and pass every live-OC binding.
+The workflow is `workflow_call` only, must itself be invoked at the exact runner SHA, pins every third-party action to an immutable commit, stores manifest/workspace outside the checkout, and uses transport credentials only for exact repository fetches. Credentials are scrubbed before provider/compiler/runtime commands.
 
-## Authority binding
+Single-use manifests require a durable ledger path shared across invocations. Claims are atomically serialized and consumed only after live OC verification.
 
-The manifest is `gold_v2_runner_authorization.v1`. It contains exact source, shared-source, production, runner, compiler, runtime, audio, timing, caption, composition, duration, artifact-state, expiry/single-use, command, binding, and expected-file-set identities applicable to its mode.
-
-`authorization_payload_sha256` is the SHA-256 of canonical JSON after removing only:
-
-- `authorization_payload_sha256`;
-- `control_head`;
-- `oc_blob_sha`.
-
-Those two Git identities are filled after the OC successor is committed. The exact OC blob must then contain all three lines:
-
-```text
-RUNNER_AUTHORIZATION_MANIFEST_ID=<manifest_id>
-RUNNER_AUTHORIZED_MODE=<mode>
-RUNNER_AUTHORIZATION_PAYLOAD_SHA256=<authorization_payload_sha256>
-```
-
-The runner verifies its own clean tracked checkout and exact `runner_head`, fetches and checks out the exact `control_head` detached, verifies that the declared live control branch still points to it, verifies `oc_blob_sha` and `DOCUMENT_ID`, and only then accepts the payload binding. The branch is a freshness check, never permission authority.
-
-## Execution guarantees
-
-- exact 40-character commit heads only;
-- detached clean checkouts and optional ancestry leases;
-- Git tree, blob, SHA-256, command-log and artifact provenance receipts;
-- source package identity, source materialization, source validation, shared-ID bindings and vendored-schema bindings;
-- compiler execution twice with byte-identical file maps and exact compiler-output artifact hash;
-- exact artifact file sets, `SHA256SUMS`, deterministic ZIPs and receipt-schema checks;
-- traversal, absolute path, drive path, backslash path, duplicate, encrypted, symlink, special file, file-count, size, compression-ratio, secret and private-payload rejection;
-- accepted audio/timing/caption identities before evidence/render modes;
-- exact composition and duration checks for render;
-- unresolved aesthetic gates emitted as `REVIEW_REQUIRED`; no automatic aesthetic `PASS`;
-- preview state fixed to `NON_ACCEPTED_RECORDING_CANDIDATE`;
-- accepted production state requires exact quality and coordinator `PASS` receipts and no unresolved Human review gate.
-
-The reusable workflow is `workflow_call` only. It has no `workflow_dispatch`, push, pull-request, schedule, or branch-derived authorization trigger. Its repository token provides read transport only.
-
-## Development validation
+Development validation:
 
 ```bash
 python3 -m unittest discover -s tests/gold_v2 -p 'test_*.py' -v
