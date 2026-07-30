@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .archive import ArchivePolicy, deterministic_zip, inspect_archive
 from .artifacts import build_human_review_queue, file_set_hashes, require_exact_file_set, write_sha256sums
-from .common import RunnerError, canonical_json_bytes, sha256_file
-from .gitops import git_blob_sha
+from .common import RunnerError, canonical_json_bytes, load_json, sha256_file
+from .gitops import assert_clean, git_blob_sha
 
 
 class StageMixin:
@@ -19,13 +18,23 @@ class StageMixin:
     receipt: dict[str, Any]
 
     def _stage(self, name: str, result: str = "PASS", **extra: Any) -> None: ...
-    def _run_named(self, name: str, **values: str) -> dict[str, Any]: ...
+    def _run_named(self, name: str, *, receipt_key: str | None = None, log_name: str | None = None, **values: str) -> dict[str, Any]: ...
+    def _fresh_checkout(self, key: str, destination: Path, lease_name: str) -> Path: ...
 
-    def _package_directory(self, root: Path, *, archive_name: str, artifact_kind: str, acceptance_state: str) -> dict[str, Any]:
+    def _package_directory(
+        self,
+        root: Path,
+        *,
+        archive_name: str,
+        artifact_kind: str,
+        acceptance_state: str,
+        receipt_schemas: Mapping[str, str] | None = None,
+    ) -> dict[str, Any]:
         payload_hashes = file_set_hashes(root)
         final_file_set = sorted(set(payload_hashes) | {"artifact_receipt.json", "archive_descriptor.json", "SHA256SUMS"})
         provenance = {
             "manifest_id": self.manifest["manifest_id"],
+            "authorization_payload_sha256": self.manifest["authorization_payload_sha256"],
             "oc_document_id": self.manifest["oc_document_id"],
             "control_head": self.manifest["control_head"],
             "source_head": self.manifest["source_head"],
@@ -67,12 +76,14 @@ class StageMixin:
         require_exact_file_set(observed, final_file_set, "ARTIFACT_EXACT_FILE_SET_MISMATCH")
         archive_path = self.workspace / "artifacts" / archive_name
         archive_sha = deterministic_zip(root, archive_path, final_file_set)
+        schemas = {
+            "artifact_receipt.json": "gold_v2_runner_artifact_receipt.v1",
+            "archive_descriptor.json": "gold_v2_runner_archive_descriptor.v1",
+        }
+        schemas.update(receipt_schemas or {})
         policy = ArchivePolicy(
             expected_files=frozenset(final_file_set),
-            receipt_schemas={
-                "artifact_receipt.json": "gold_v2_runner_artifact_receipt.v1",
-                "archive_descriptor.json": "gold_v2_runner_archive_descriptor.v1",
-            },
+            receipt_schemas=schemas,
             expected_archive_sha256=archive_sha,
             forbidden_suffixes=frozenset({".env", ".pem", ".key", ".p12"}),
         )
@@ -89,9 +100,21 @@ class StageMixin:
         first, second = runs_root / "run-1", runs_root / "run-2"
         first.mkdir(parents=True)
         second.mkdir(parents=True)
-        self._run_named("compiler", output_dir=str(first))
+        original_compiler_repo = self.repos["compiler"]
+        try:
+            run_one_repo = self._fresh_checkout("compiler", self.workspace / "compile-checkouts" / "run-1", "compiler_run_1")
+            self.repos["compiler"] = run_one_repo
+            self._run_named("compiler", receipt_key="compiler_run_1", log_name="compiler-run-1", output_dir=str(first))
+            assert_clean(run_one_repo)
+
+            run_two_repo = self._fresh_checkout("compiler", self.workspace / "compile-checkouts" / "run-2", "compiler_run_2")
+            self.repos["compiler"] = run_two_repo
+            self._run_named("compiler", receipt_key="compiler_run_2", log_name="compiler-run-2", output_dir=str(second))
+            assert_clean(run_two_repo)
+        finally:
+            self.repos["compiler"] = original_compiler_repo
+
         first_hashes = file_set_hashes(first)
-        self._run_named("compiler", output_dir=str(second))
         second_hashes = file_set_hashes(second)
         expected_files = self.manifest["expected_outputs"]["compiler_files"]
         require_exact_file_set(first_hashes, expected_files, "COMPILER_EXACT_FILE_SET_MISMATCH")
@@ -116,6 +139,7 @@ class StageMixin:
             "source_head": self.manifest["source_head"],
             "shared_source_head": self.manifest["shared_source_head"],
             "two_run_byte_identical": True,
+            "independent_exact_checkouts": True,
             "exact_file_set": sorted(expected_files),
             "file_sha256": first_hashes,
             "no_fake_green": True,
@@ -134,6 +158,7 @@ class StageMixin:
             "max_total_bytes": 536870912,
             "max_compression_ratio": 200.0,
             "provenance": {
+                "authorization_payload_sha256": self.manifest["authorization_payload_sha256"],
                 "control_head": self.manifest["control_head"],
                 "source_head": self.manifest["source_head"],
                 "production_head": self.manifest["production_head"],
@@ -163,7 +188,7 @@ class StageMixin:
             "archive_sha256": archive_sha,
             "security_receipt": security_receipt,
         }
-        self._stage("compile", reproducibility="PASS", archive_security="PASS")
+        self._stage("compile", reproducibility="PASS", independent_exact_checkouts=True, archive_security="PASS")
 
     def _pre_render_evidence(self) -> None:
         root = self.workspace / "artifacts" / "pre-render-evidence"
@@ -176,32 +201,32 @@ class StageMixin:
         queue = build_human_review_queue(self.manifest["human_review_gates"])
         (root / "human_review_queue.json").write_bytes(canonical_json_bytes(queue))
         observed = file_set_hashes(root)
-        expected = self.manifest["expected_outputs"].get("pre_render_files", [])
-        if expected:
-            require_exact_file_set(observed, [*expected, "human_review_queue.json"], "PRE_RENDER_EXACT_FILE_SET_MISMATCH")
+        expected = [*self.manifest["expected_outputs"]["pre_render_files"], "human_review_queue.json"]
+        require_exact_file_set(observed, expected, "PRE_RENDER_EXACT_FILE_SET_MISMATCH")
         self.receipt["human_review_queue"] = {
             "path": "artifacts/pre-render-evidence/human_review_queue.json",
             "sha256": sha256_file(root / "human_review_queue.json"),
+            "result": queue["result"],
             "automatic_aesthetic_pass": False,
         }
         self.receipt["pre_render_artifact"] = self._package_directory(
-            root, archive_name="pre-render-evidence.zip", artifact_kind="PRE_RENDER_EVIDENCE",
+            root,
+            archive_name="pre-render-evidence.zip",
+            artifact_kind="PRE_RENDER_EVIDENCE",
             acceptance_state=self.manifest["acceptance_state"],
+            receipt_schemas={"human_review_queue.json": "gold_v2_runner_human_review_queue.v1"},
         )
-        self._stage("pre_render_evidence", human_review="REVIEW_REQUIRED", archive_security="PASS")
+        self._stage("pre_render_evidence", human_review=queue["result"], archive_security="PASS")
 
     def _verify_receipt_binding(self, name: str) -> None:
         binding = self.manifest[name]
         repo = self.repos["production"]
         path = repo / binding["path"]
-        if not path.is_file():
+        if not path.is_file() or path.is_symlink():
             raise RunnerError(f"{name.upper()}_MISSING")
         if sha256_file(path) != binding["sha256"] or git_blob_sha(repo, binding["path"]) != binding["git_blob_sha"]:
             raise RunnerError(f"{name.upper()}_IDENTITY_MISMATCH")
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RunnerError(f"{name.upper()}_JSON_INVALID") from exc
+        data = load_json(path)
         if data.get("result") != "PASS":
             raise RunnerError(f"{name.upper()}_PASS_REQUIRED")
 
@@ -212,18 +237,20 @@ class StageMixin:
         root.mkdir(parents=True)
         self.receipt["video_render_started"] = True
         self._run_named("video_render", render_dir=str(root))
-        receipt_path = root / self.manifest["expected_outputs"].get("render_receipt", "render_receipt.json")
-        if not receipt_path.is_file():
+        expected = self.manifest["expected_outputs"]
+        receipt_relative = expected["render_receipt"]
+        receipt_path = root / receipt_relative
+        if not receipt_path.is_file() or receipt_path.is_symlink():
             raise RunnerError("RENDER_RECEIPT_MISSING")
-        render_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        render_receipt = load_json(receipt_path)
+        if render_receipt.get("schema_version") != expected["render_receipt_schema_version"]:
+            raise RunnerError("RENDER_RECEIPT_SCHEMA_MISMATCH")
         if render_receipt.get("composition_id") != self.manifest["composition_id"]:
             raise RunnerError("RENDER_COMPOSITION_MISMATCH")
         if render_receipt.get("duration_ms") != self.manifest["duration_ms"]:
             raise RunnerError("RENDER_DURATION_MISMATCH")
         observed = file_set_hashes(root)
-        expected = self.manifest["expected_outputs"].get("render_files", [])
-        if expected:
-            require_exact_file_set(observed, expected, "RENDER_EXACT_FILE_SET_MISMATCH")
+        require_exact_file_set(observed, expected["render_files"], "RENDER_EXACT_FILE_SET_MISMATCH")
         self.receipt["acceptance_state"] = self.manifest["acceptance_state"]
         self.receipt["render"] = {
             "composition_id": self.manifest["composition_id"],
@@ -231,8 +258,10 @@ class StageMixin:
             "file_sha256": observed,
         }
         self.receipt["render_artifact"] = self._package_directory(
-            root, archive_name="render-release.zip",
+            root,
+            archive_name="render-release.zip",
             artifact_kind="PRODUCTION_RENDER" if self.manifest["artifact_class"] == "PRODUCTION" else "PREVIEW_RENDER",
             acceptance_state=self.manifest["acceptance_state"],
+            receipt_schemas={receipt_relative: expected["render_receipt_schema_version"]},
         )
         self._stage("render", archive_security="PASS")
