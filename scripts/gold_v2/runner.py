@@ -28,7 +28,7 @@ def execution_head() -> str:
     root = Path(__file__).resolve().parents[2]
     try:
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-        dirty = subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=no"], cwd=root, text=True).strip()
+        dirty = subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=root, text=True).strip()
     except (OSError, subprocess.CalledProcessError) as exc:
         raise RunnerError("EXECUTION_RUNNER_GIT_CHECKOUT_REQUIRED") from exc
     if dirty:
@@ -47,10 +47,10 @@ def main(argv: list[str] | None = None) -> int:
             execution_runner_head=execution_head(),
         ).run()
     except RunnerError as exc:
-        print(f"BLOCKED:{exc}", file=sys.stderr)
+        print(f"BLOCKED:{str(exc).split(':', 1)[0]}", file=sys.stderr)
         return 2
     except Exception as exc:
-        print(f"BLOCKED:UNEXPECTED:{exc}", file=sys.stderr)
+        print(f"BLOCKED:UNEXPECTED_{type(exc).__name__.upper()}", file=sys.stderr)
         return 3
     print(receipt)
     return 0
