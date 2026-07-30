@@ -155,7 +155,7 @@ class WorkflowHardeningTests(unittest.TestCase):
         self.assertNotIn("actions/upload-artifact@v", self.text)
 
     def test_workflow_requires_exact_self_ref(self):
-        self.assertIn("github.workflow_ref", self.text)
+        self.assertIn("job.workflow_sha", self.text)
         self.assertIn('reusable workflow must be invoked at the same exact runner SHA', self.text)
 
     def test_inputs_and_workspace_are_outside_checkout(self):
