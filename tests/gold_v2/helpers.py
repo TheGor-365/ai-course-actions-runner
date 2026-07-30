@@ -60,14 +60,28 @@ def base_manifest(root: Path, mode: str = "validate-only") -> tuple[dict[str, An
     noop = {"repo": "production", "argv": ["python3", "-c", "pass"]}
     commands = {name: dict(noop) for name in (
         "source_materialize", "source_validate", "shared_id_validate", "schema_validate", "archive_prereq_validate",
-        "runtime_discovery", "runtime_typecheck", "runtime_tests", "audio_timing_validate", "quality_materialize",
-        "dom_evidence", "still_evidence", "video_render",
     )}
-    compiler_script = (
-        "import pathlib; p=pathlib.Path(r'{output_dir}'); p.mkdir(parents=True,exist_ok=True); "
-        "(p/'artifact.bin').write_bytes(b'fixed'); (p/'manifest.json').write_text('ok\\n',encoding='utf-8')"
-    )
-    commands["compiler"] = {"repo": "compiler", "argv": ["python3", "-c", compiler_script]}
+    expected_outputs: dict[str, Any] = {}
+    if mode in ("compile", "pre-render-evidence", "render"):
+        compiler_script = (
+            "import pathlib; p=pathlib.Path(r'{output_dir}'); p.mkdir(parents=True,exist_ok=True); "
+            "(p/'artifact.bin').write_bytes(b'fixed'); (p/'manifest.json').write_text('ok\\n',encoding='utf-8')"
+        )
+        commands["compiler"] = {"repo": "compiler", "argv": ["python3", "-c", compiler_script]}
+        expected_outputs["compiler_files"] = ["artifact.bin", "manifest.json"]
+    if mode in ("pre-render-evidence", "render"):
+        commands.update({name: dict(noop) for name in (
+            "runtime_discovery", "runtime_typecheck", "runtime_tests", "audio_timing_validate", "quality_materialize",
+            "dom_evidence", "still_evidence",
+        )})
+        expected_outputs["pre_render_files"] = ["evidence.json"]
+    if mode == "render":
+        commands["video_render"] = dict(noop)
+        expected_outputs.update({
+            "render_files": ["video.mp4", "render_receipt.json"],
+            "render_receipt": "render_receipt.json",
+            "render_receipt_schema_version": "fixture.render_receipt.v1",
+        })
     package_sha = sha256_file(source / "package.json")
     manifest: dict[str, Any] = {
         "schema_version": "gold_v2_runner_authorization.v1",
@@ -84,6 +98,7 @@ def base_manifest(root: Path, mode: str = "validate-only") -> tuple[dict[str, An
         "mode": mode,
         "source_repository": str(source), "source_head": source_head,
         "source_package_path": "package.json", "source_package_sha256": package_sha,
+        "source_package_git_blob_sha": blob(source, "package.json"),
         "shared_source_repository": str(shared), "shared_source_head": shared_head,
         "production_repository": str(production), "production_head": production_head,
         "runner_repository": str(runner), "runner_head": runner_head,
@@ -98,7 +113,7 @@ def base_manifest(root: Path, mode: str = "validate-only") -> tuple[dict[str, An
         "commands": commands,
         "bindings": [binding("source", source, "shared.txt"), binding("shared_source", shared, "ids.json")],
         "schema_bindings": [binding("production", production, "schema.json")],
-        "expected_outputs": {"compiler_files": ["artifact.bin", "manifest.json"]},
+        "expected_outputs": expected_outputs,
         "artifact_class": "EVIDENCE",
         "acceptance_state": "UNACCEPTED_EXECUTION_EVIDENCE",
         "human_review_gates": [{
@@ -155,6 +170,24 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
     path.write_bytes(canonical_json_bytes(manifest))
 
 
+def rebind_oc(manifest: dict[str, Any], repos: dict[str, Path]) -> None:
+    seal(manifest)
+    control = repos["control"]
+    text = (
+        "# fixture\n"
+        f"DOCUMENT_ID={manifest['oc_document_id']}\n"
+        f"RUNNER_AUTHORIZATION_MANIFEST_ID={manifest['manifest_id']}\n"
+        f"RUNNER_AUTHORIZED_MODE={manifest['mode']}\n"
+        f"RUNNER_AUTHORIZATION_PAYLOAD_SHA256={manifest['authorization_payload_sha256']}\n"
+    )
+    (control / manifest["control_path"]).write_text(text, encoding="utf-8")
+    subprocess.run(["git", "add", manifest["control_path"]], cwd=control, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "rebind authority"], cwd=control, check=True)
+    manifest["control_head"] = git(control, "rev-parse", "HEAD")
+    manifest["oc_blob_sha"] = blob(control, manifest["control_path"])
+    seal(manifest)
+
+
 def valid_archive(path: Path, *, secret: bool = False, private_path: bool = False) -> tuple[set[str], dict[str, str]]:
     receipt_name = "receipt.json"
     data_name = "private_media/client.bin" if private_path else "data.txt"
@@ -181,21 +214,3 @@ def mark_zip_encrypted(path: Path) -> None:
             raw[index + flag_offset:index + flag_offset + 2] = flags.to_bytes(2, "little")
             start = index + 4
     path.write_bytes(raw)
-
-
-def rebind_oc(manifest: dict[str, Any], repos: dict[str, Path]) -> None:
-    seal(manifest)
-    control = repos["control"]
-    text = (
-        "# fixture\n"
-        f"DOCUMENT_ID={manifest['oc_document_id']}\n"
-        f"RUNNER_AUTHORIZATION_MANIFEST_ID={manifest['manifest_id']}\n"
-        f"RUNNER_AUTHORIZED_MODE={manifest['mode']}\n"
-        f"RUNNER_AUTHORIZATION_PAYLOAD_SHA256={manifest['authorization_payload_sha256']}\n"
-    )
-    (control / manifest["control_path"]).write_text(text, encoding="utf-8")
-    subprocess.run(["git", "add", manifest["control_path"]], cwd=control, check=True)
-    subprocess.run(["git", "commit", "--quiet", "-m", "rebind authority"], cwd=control, check=True)
-    manifest["control_head"] = git(control, "rev-parse", "HEAD")
-    manifest["oc_blob_sha"] = blob(control, manifest["control_path"])
-    seal(manifest)
