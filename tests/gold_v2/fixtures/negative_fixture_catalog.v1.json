@@ -17,7 +17,11 @@
     {"id": "private_payload", "expected_error": "PRIVATE_PAYLOAD_PATH_FORBIDDEN"},
     {"id": "provisional_head", "expected_error": "SOURCE_HEAD_INVALID"},
     {"id": "preview_mislabeled_as_production", "expected_error": "PREVIEW_ACCEPTANCE_STATE_INVALID"},
-    {"id": "branch_name_authority_inference", "expected_error": "MODE_NOT_AUTHORIZED:compile"}
+    {"id": "branch_name_authority_inference", "expected_error": "MODE_NOT_AUTHORIZED:compile"},
+    {"id": "mutable_action_ref", "expected_error": "WORKFLOW_ACTION_REF_NOT_PINNED"},
+    {"id": "single_use_race", "expected_error": "AUTHORIZATION_SINGLE_USE_ALREADY_CONSUMED"},
+    {"id": "missing_pre_render_exact_file_set", "expected_error": "EXPECTED_OUTPUT_SET_KEYS_INVALID"},
+    {"id": "production_nonaccepted_state", "expected_error": "PRODUCTION_ACCEPTANCE_STATE_INVALID"}
   ],
   "no_fake_green": true
 }
