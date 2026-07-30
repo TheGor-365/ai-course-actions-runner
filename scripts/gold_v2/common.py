@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ from typing import Any, Iterable, Mapping
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+SAFE_ERROR = re.compile(r"^[A-Z0-9_]+$")
 DRIVE = re.compile(r"^[A-Za-z]:")
 MODES = ("validate-only", "compile", "pre-render-evidence", "render")
 MODE_RANK = {mode: rank for rank, mode in enumerate(MODES)}
@@ -22,6 +24,9 @@ SENSITIVE_MARKERS = (
 PRIVATE_PATH_MARKERS = (
     "/.git/", ".git/", "private_repository_archive", "raw_provider_payload",
     "client_private_media", "private_media/", "private_media",
+)
+TRANSPORT_ENV_NAMES = (
+    "REPO_READ_TOKEN", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_SSH_COMMAND",
 )
 
 
@@ -111,11 +116,60 @@ def scan_sensitive(path: str, data: bytes) -> None:
             raise RunnerError(f"SENSITIVE_MARKER_FORBIDDEN:{path}:{marker}")
 
 
+def safe_error_code(exc: BaseException) -> str:
+    if isinstance(exc, RunnerError):
+        code = str(exc).split(":", 1)[0]
+        if SAFE_ERROR.fullmatch(code):
+            return code
+    return f"UNEXPECTED_{type(exc).__name__.upper()}"
+
+
+def scrub_transport_environment() -> None:
+    for name in list(os.environ):
+        if name in TRANSPORT_ENV_NAMES or name.startswith("GIT_CONFIG_"):
+            os.environ.pop(name, None)
+
+
 def consume_single_use(identity: str, ledger: Path) -> None:
+    if not isinstance(identity, str) or not identity.strip():
+        raise RunnerError("AUTHORIZATION_SINGLE_USE_ID_INVALID")
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    existing = set(ledger.read_text(encoding="utf-8").splitlines()) if ledger.exists() else set()
-    if identity in existing:
-        raise RunnerError("AUTHORIZATION_SINGLE_USE_ALREADY_CONSUMED")
-    tmp = ledger.with_name(f".{ledger.name}.{os.getpid()}.tmp")
-    tmp.write_text("".join(f"{item}\n" for item in sorted(existing | {identity})), encoding="utf-8")
-    os.replace(tmp, ledger)
+    if ledger.exists() and (ledger.is_symlink() or not ledger.is_file()):
+        raise RunnerError("SINGLE_USE_LEDGER_REGULAR_FILE_REQUIRED")
+    lock_path = ledger.with_name(f".{ledger.name}.lock")
+    if lock_path.exists() and lock_path.is_symlink():
+        raise RunnerError("SINGLE_USE_LEDGER_LOCK_SYMLINK_FORBIDDEN")
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    lock_fd = os.open(lock_path, flags, 0o600)
+    try:
+        with os.fdopen(lock_fd, "r+", encoding="utf-8", closefd=False) as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            if ledger.exists() and (ledger.is_symlink() or not ledger.is_file()):
+                raise RunnerError("SINGLE_USE_LEDGER_REGULAR_FILE_REQUIRED")
+            existing = set(ledger.read_text(encoding="utf-8").splitlines()) if ledger.exists() else set()
+            if identity in existing:
+                raise RunnerError("AUTHORIZATION_SINGLE_USE_ALREADY_CONSUMED")
+            tmp = ledger.with_name(f".{ledger.name}.{os.getpid()}.tmp")
+            tmp_flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            if hasattr(os, "O_NOFOLLOW"):
+                tmp_flags |= os.O_NOFOLLOW
+            tmp_fd = os.open(tmp, tmp_flags, 0o600)
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as handle:
+                    handle.write("".join(f"{item}\n" for item in sorted(existing | {identity})))
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, ledger)
+                directory_fd = os.open(ledger.parent, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        os.close(lock_fd)
