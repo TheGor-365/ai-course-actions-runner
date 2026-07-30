@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -21,13 +22,27 @@ class StaticContractTests(unittest.TestCase):
         self.assertEqual(1,text.count("python3 scripts/gold_v2/runner.py"))
         self.assertIn("permissions:\n  contents: read",text)
 
+    def test_workflow_actions_are_exact_sha_pinned(self):
+        text=(ROOT/".github/workflows/gold-v2-diamond-15min.yml").read_text()
+        refs=re.findall(r"uses:\s+([^\s#]+)", text)
+        self.assertEqual(3, len(refs))
+        for ref in refs:
+            self.assertRegex(ref, r"^[^@]+@[0-9a-f]{40}$")
+
+    def test_workflow_exact_self_ref_and_external_workspace(self):
+        text=(ROOT/".github/workflows/gold-v2-diamond-15min.yml").read_text()
+        self.assertIn("github.workflow_ref", text)
+        self.assertIn("$RUNNER_TEMP/gold-v2-input", text)
+        self.assertIn("$RUNNER_TEMP/gold-v2-run", text)
+
     def test_negative_fixture_catalog_complete(self):
         data=json.loads((ROOT/"tests/gold_v2/fixtures/negative_fixture_catalog.v1.json").read_text())
         required={
             "unauthorized_compile","unauthorized_evidence","unauthorized_render","stale_control_head",
             "wrong_source_head","wrong_compiler_artifact","missing_runtime_head","missing_sha256sums",
             "extra_archive_file","traversal","symlink","secret","private_payload","provisional_head",
-            "preview_mislabeled_as_production","branch_name_authority_inference",
+            "preview_mislabeled_as_production","branch_name_authority_inference","mutable_action_ref",
+            "single_use_race","missing_pre_render_exact_file_set","production_nonaccepted_state",
         }
         self.assertEqual(required,{item["id"] for item in data["cases"]})
 
