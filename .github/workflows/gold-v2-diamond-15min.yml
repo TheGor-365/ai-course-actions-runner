@@ -1,0 +1,112 @@
+name: Gold V2 Diamond 15-minute runner
+
+on:
+  workflow_call:
+    inputs:
+      runner_head:
+        description: Exact 40-character runner commit SHA containing this workflow and runner code.
+        required: true
+        type: string
+      mode:
+        description: Exact authorized mode from the live authority manifest.
+        required: true
+        type: string
+      authorization_manifest_json:
+        description: Complete machine-readable manifest; permission is revalidated against live OC bytes.
+        required: true
+        type: string
+      single_use_ledger_path:
+        description: Optional persistent ledger path for single-use identities.
+        required: false
+        default: ""
+        type: string
+    secrets:
+      repo_read_token:
+        description: Read-only cross-repository token. It provides transport access, never mode authority.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  execute:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Reject non-exact runner identity
+        shell: bash
+        env:
+          RUNNER_HEAD: ${{ inputs.runner_head }}
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo "runner_head must be an exact lowercase commit SHA" >&2; exit 2; }
+
+      - name: Checkout exact runner head
+        uses: actions/checkout@v4
+        with:
+          repository: TheGor-365/ai-course-actions-runner
+          ref: ${{ inputs.runner_head }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure read-only repository transport
+        shell: bash
+        env:
+          REPO_READ_TOKEN: ${{ secrets.repo_read_token }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${REPO_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Materialize exact authority manifest
+        shell: bash
+        env:
+          AUTHORIZATION_MANIFEST_JSON: ${{ inputs.authorization_manifest_json }}
+        run: |
+          set -euo pipefail
+          mkdir -p .gold-v2-input
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          value = os.environ["AUTHORIZATION_MANIFEST_JSON"]
+          Path(".gold-v2-input/authorization.json").write_text(value, encoding="utf-8")
+          PY
+
+      - name: Execute one fail-closed command
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          SINGLE_USE_LEDGER_PATH: ${{ inputs.single_use_ledger_path }}
+        run: |
+          set -euo pipefail
+          args=(
+            --mode "$MODE"
+            --authorization-manifest .gold-v2-input/authorization.json
+            --workspace .gold-v2-run
+          )
+          if [[ -n "$SINGLE_USE_LEDGER_PATH" ]]; then
+            args+=(--single-use-ledger "$SINGLE_USE_LEDGER_PATH")
+          fi
+          python3 scripts/gold_v2/runner.py "${args[@]}"
+
+      - name: Upload scanned receipts and archives only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-v2-runner-${{ inputs.mode }}-${{ inputs.runner_head }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            .gold-v2-run/release_receipt.json
+            .gold-v2-run/blocked_receipt.json
+            .gold-v2-run/artifacts/**/*.zip
+
+      - name: Remove repository credential rewrite
+        if: always()
+        shell: bash
+        run: |
+          git config --global --unset-all url."https://x-access-token:${{ secrets.repo_read_token }}@github.com/".insteadOf || true
