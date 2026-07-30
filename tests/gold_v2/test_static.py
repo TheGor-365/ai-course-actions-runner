@@ -31,7 +31,7 @@ class StaticContractTests(unittest.TestCase):
 
     def test_workflow_exact_self_ref_and_external_workspace(self):
         text=(ROOT/".github/workflows/gold-v2-diamond-15min.yml").read_text()
-        self.assertIn("github.workflow_ref", text)
+        self.assertIn("job.workflow_sha", text)
         self.assertIn("$RUNNER_TEMP/gold-v2-input", text)
         self.assertIn("$RUNNER_TEMP/gold-v2-run", text)
 
