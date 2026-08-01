@@ -1,0 +1,88 @@
+name: Gold V2 source exact-head execution evidence v1
+
+"on":
+  push:
+    branches:
+      - worker/gold-v2-source-execution-evidence-v1
+    paths:
+      - .github/workflows/gold-v2-source-execution-evidence-v1.yml
+      - scripts/gold_v2/source_execution_evidence_v1.py
+      - tests/gold_v2/test_source_execution_evidence_v1.py
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gold-v2-source-execution-evidence-v1-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    name: execute-exact-source-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact runner commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Run bounded unit and static tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPYCACHEPREFIX="$RUNNER_TEMP/unit-pycache"
+          python3 -m py_compile \
+            scripts/gold_v2/source_execution_evidence_v1.py \
+            tests/gold_v2/test_source_execution_evidence_v1.py
+          python3 -m unittest tests/gold_v2/test_source_execution_evidence_v1.py -v
+
+      - name: Execute exact-head source evidence
+        id: evidence
+        shell: bash
+        env:
+          GOLD_V2_SOURCE_READ_TOKEN: ${{ secrets.GOLD_V2_SOURCE_READ_TOKEN }}
+          SOURCE_REPO_READ_TOKEN: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          REPO_READ_TOKEN: ${{ secrets.REPO_READ_TOKEN }}
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          python3 scripts/gold_v2/source_execution_evidence_v1.py \
+            --runner-repo "$GITHUB_WORKSPACE" \
+            --workspace "$workspace"
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "archive_path=$workspace/gold-v2-source-execution-evidence-v1.zip" >> "$GITHUB_OUTPUT"
+          echo "receipt_path=$workspace/evidence/machine_receipt.json" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload deterministic evidence archive
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gold-v2-source-execution-evidence-v1-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            ${{ steps.evidence.outputs.archive_path }}
+            ${{ steps.evidence.outputs.receipt_path }}
+
+      - name: Enforce evidence result
+        if: always()
+        shell: bash
+        env:
+          EVIDENCE_EXIT_CODE: ${{ steps.evidence.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          [[ "$EVIDENCE_EXIT_CODE" =~ ^[0-9]+$ ]] || exit 99
+          exit "$EVIDENCE_EXIT_CODE"
