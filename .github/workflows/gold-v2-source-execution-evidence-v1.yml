@@ -220,8 +220,24 @@ jobs:
         shell: bash
         env:
           ACTIONS_READ_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/evidence-pycache
         run: |
+          set -euo pipefail
+          mapfile -t cache_paths < <(
+            find scripts/gold_v2 tests/gold_v2 -depth \
+              \( -type d -name __pycache__ -o -type f -name '*.pyc' \) \
+              -print
+          )
+          if ((${#cache_paths[@]})); then
+            printf '%s\n' "${cache_paths[@]}"
+            for cache_path in "${cache_paths[@]}"; do
+              rm -rf -- "$cache_path"
+            done
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
           set +e
+
           workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
           WORKSPACE="$workspace" python3 - <<'PY'
           from __future__ import annotations
@@ -241,6 +257,18 @@ jobs:
           worker = importlib.util.module_from_spec(spec)
           sys.modules[spec.name] = worker
           spec.loader.exec_module(worker)
+
+          dirty_after_import = worker.git(
+              runner,
+              'status',
+              '--porcelain=v1',
+              '--untracked-files=all',
+          )
+          if dirty_after_import:
+              raise worker.Gate(
+                  'RUNNER_DIRTY_AFTER_WORKER_IMPORT',
+                  dirty_after_import.splitlines(),
+              )
 
           transport_name = "PRIVATE" + "_REPO" + "_PAT"
           present = [transport_name] if os.environ.get(transport_name) else []
@@ -277,6 +305,17 @@ jobs:
           )
 
           code, receipt, archive_path = worker.execute(workspace, runner, os.environ)
+          dirty_after_execution = worker.git(
+              runner,
+              'status',
+              '--porcelain=v1',
+              '--untracked-files=all',
+          )
+          if dirty_after_execution:
+              raise worker.Gate(
+                  'RUNNER_DIRTY_AFTER_EVIDENCE_EXECUTION',
+                  dirty_after_execution.splitlines(),
+              )
           print(json.dumps({
               'archive': str(archive_path),
               'blocker': receipt.get('blocker'),
