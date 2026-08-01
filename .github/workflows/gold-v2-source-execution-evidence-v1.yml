@@ -1,0 +1,367 @@
+name: Gold V2 source exact-head execution evidence v1
+
+"on":
+  push:
+    branches:
+      - worker/gold-v2-source-execution-evidence-v1
+    paths:
+      - .github/workflows/gold-v2-source-execution-evidence-v1.yml
+      - scripts/gold_v2/source_execution_evidence_v1.py
+      - tests/gold_v2/test_source_execution_evidence_v1.py
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gold-v2-source-execution-evidence-v1-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    name: execute-exact-source-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Bootstrap deterministic fail-closed evidence
+        id: bootstrap
+        shell: bash
+        env:
+          BOOTSTRAP_RUNNER_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          evidence="$workspace/evidence"
+          archive="$workspace/gold-v2-source-execution-evidence-v1.zip"
+          receipt="$evidence/machine_receipt.json"
+          rm -rf "$workspace"
+          mkdir -p "$evidence"
+          WORKSPACE="$workspace" BOOTSTRAP_RUNNER_HEAD="$BOOTSTRAP_RUNNER_HEAD" python3 - <<'PY'
+          # BOOTSTRAP_EVIDENCE_V1_START
+          from __future__ import annotations
+
+          import json
+          import os
+          import zipfile
+          from pathlib import Path
+
+          workspace = Path(os.environ["WORKSPACE"])
+          evidence = workspace / "evidence"
+          receipt_path = evidence / "machine_receipt.json"
+          archive_path = workspace / "gold-v2-source-execution-evidence-v1.zip"
+          receipt = {
+              "blocker": "BOOTSTRAP_PENDING",
+              "evidence_result": "REPAIR_REQUIRED",
+              "fresh_detached_checkout": False,
+              "independent_verifier_pass_claimed": False,
+              "media_render_started": False,
+              "no_fake_green": True,
+              "production_writes": 0,
+              "runner_head": os.environ.get("BOOTSTRAP_RUNNER_HEAD") or None,
+              "secret_value_exposed": False,
+              "source_head": "ab38ac36a786cdb93fc15263fadf391ce62368d5",
+              "source_writes": 0,
+              "workflow_repository": "TheGor-365/ai-course-actions-runner",
+          }
+          payload = (
+              json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+              + "\n"
+          ).encode("utf-8")
+          receipt_path.write_bytes(payload)
+          info = zipfile.ZipInfo("machine_receipt.json", (1980, 1, 1, 0, 0, 0))
+          info.compress_type = zipfile.ZIP_DEFLATED
+          info.create_system = 3
+          info.external_attr = 0o100644 << 16
+          with zipfile.ZipFile(
+              archive_path,
+              "w",
+              zipfile.ZIP_DEFLATED,
+              compresslevel=9,
+          ) as output:
+              output.writestr(
+                  info,
+                  payload,
+                  compress_type=zipfile.ZIP_DEFLATED,
+                  compresslevel=9,
+              )
+          # BOOTSTRAP_EVIDENCE_V1_END
+          PY
+          test -s "$receipt"
+          test -s "$archive"
+          echo "archive_path=$archive" >> "$GITHUB_OUTPUT"
+          echo "receipt_path=$receipt" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact runner commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Run bounded unit and structural static tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPYCACHEPREFIX="$RUNNER_TEMP/unit-pycache"
+          python3 -m py_compile \
+            scripts/gold_v2/source_execution_evidence_v1.py \
+            tests/gold_v2/test_source_execution_evidence_v1.py
+          python3 -m unittest tests/gold_v2/test_source_execution_evidence_v1.py -v
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path(
+              ".github/workflows/gold-v2-source-execution-evidence-v1.yml"
+          ).read_text(encoding="utf-8")
+          marker = "sec" + "rets."
+          expected = "PRIVATE" + "_REPO" + "_PAT"
+          opening = "$" + "{" + "{"
+          closing = "}" + "}"
+          expression = re.compile(
+              re.escape(opening)
+              + r"\s*"
+              + re.escape(marker)
+              + r"([A-Z0-9_]+)\s*"
+              + re.escape(closing)
+          )
+          bindings = expression.findall(text)
+          assert bindings == [expected], bindings
+          assert "persist-credentials: false" in text
+          assert "git remote set-url --push origin DISABLED" in text
+          assert "steps.bootstrap.outputs.archive_path" in text
+          assert "steps.bootstrap.outputs.receipt_path" in text
+          PY
+
+      - name: Fetch exact private source head with transport-only credential
+        shell: bash
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          SOURCE_REPOSITORY: TheGor-365/ai-course-source-library
+          SOURCE_PR: "66"
+          SOURCE_HEAD: ab38ac36a786cdb93fc15263fadf391ce62368d5
+          STACK_BASE_HEAD: 301bbfb48216060e84d1adcc3ac87ae67eb66a9f
+        run: |
+          set -euo pipefail
+          [[ -n "$PRIVATE_REPO_PAT" ]] || {
+            echo "BLOCKER=MISSING_READ_ONLY_PRIVATE_REPO_TOKEN" >&2
+            echo "SECRET_NAME=PRIVATE_REPO_PAT" >&2
+            echo "SECRET_VALUE_EXPOSED=false" >&2
+            exit 2
+          }
+
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          source="$workspace/fresh-source"
+          evidence="$workspace/evidence"
+          rm -rf "$source"
+          mkdir -p "$source" "$evidence"
+
+          git -C "$source" init --quiet
+          git -C "$source" remote add origin "https://github.com/$SOURCE_REPOSITORY.git"
+
+          GIT_TERMINAL_PROMPT=0 \
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:${PRIVATE_REPO_PAT}@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/" \
+            git -C "$source" fetch --no-tags origin "refs/pull/$SOURCE_PR/head"
+
+          git -C "$source" checkout --detach --quiet FETCH_HEAD
+          observed_head="$(git -C "$source" rev-parse HEAD)"
+          [[ "$observed_head" == "$SOURCE_HEAD" ]] || {
+            echo "BLOCKER=SOURCE_PR_HEAD_DRIFT" >&2
+            exit 2
+          }
+          repository_is_shallow="$(git -C "$source" rev-parse --is-shallow-repository)"
+          [[ "$repository_is_shallow" == "false" ]]
+          git -C "$source" cat-file -e "${STACK_BASE_HEAD}^{commit}"
+          git -C "$source" merge-base --is-ancestor \
+            "$STACK_BASE_HEAD" "$SOURCE_HEAD"
+
+          unset PRIVATE_REPO_PAT
+          [[ -z "${PRIVATE_REPO_PAT+x}" ]]
+          git -C "$source" remote set-url --push origin DISABLED
+          [[ "$(git -C "$source" remote get-url --push origin)" == "DISABLED" ]]
+          ! grep -R -F -q 'x-access-token:' "$source/.git/config"
+          [[ -z "$(git -C "$source" symbolic-ref -q HEAD || true)" ]]
+          [[ -z "$(git -C "$source" status --porcelain=v1 --untracked-files=all)" ]]
+
+          SOURCE_ROOT="$source" \
+          EVIDENCE_ROOT="$evidence" \
+          SOURCE_HEAD="$SOURCE_HEAD" \
+          STACK_BASE_HEAD="$STACK_BASE_HEAD" \
+          REPOSITORY_IS_SHALLOW="$repository_is_shallow" \
+            python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          source = Path(os.environ['SOURCE_ROOT'])
+          evidence = Path(os.environ['EVIDENCE_ROOT'])
+          push_url = subprocess.check_output(
+              ['git', '-C', str(source), 'remote', 'get-url', '--push', 'origin'],
+              text=True,
+          ).strip()
+          receipt = {
+              'credential_environment_scrubbed_after_checkout': True,
+              'history_checkout_mode': 'FULL_REACHABLE_HISTORY',
+              'private_source_fetch_completed': True,
+              'remote_push_url': push_url,
+              'remote_push_disabled': push_url == 'DISABLED',
+              'repository_is_shallow': os.environ['REPOSITORY_IS_SHALLOW'] == 'true',
+              'secret_name': 'PRIVATE_REPO_PAT',
+              'secret_value_exposed': False,
+              'source_head': os.environ['SOURCE_HEAD'],
+              'source_pr': 66,
+              'source_repository': 'TheGor-365/ai-course-source-library',
+              'stack_base_head': os.environ['STACK_BASE_HEAD'],
+              'stack_base_is_ancestor': True,
+              'stack_base_object_present': True,
+              'transport_credential_scope': 'PRIVATE_SOURCE_FETCH_ONLY',
+              'validators_received_transport_credential': False,
+          }
+          (evidence / 'private_source_fetch_receipt.json').write_text(
+              json.dumps(receipt, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Execute exact-head source evidence without transport credential
+        id: evidence
+        shell: bash
+        env:
+          ACTIONS_READ_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/evidence-pycache
+        run: |
+          set -euo pipefail
+          mapfile -t cache_paths < <(
+            find scripts/gold_v2 tests/gold_v2 -depth \
+              \( -type d -name __pycache__ -o -type f -name '*.pyc' \) \
+              -print
+          )
+          if ((${#cache_paths[@]})); then
+            printf '%s\n' "${cache_paths[@]}"
+            for cache_path in "${cache_paths[@]}"; do
+              rm -rf -- "$cache_path"
+            done
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          set +e
+
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          WORKSPACE="$workspace" python3 - <<'PY'
+          from __future__ import annotations
+
+          import importlib.util
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          workspace = Path(os.environ['WORKSPACE']).resolve()
+          runner = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          script = runner / 'scripts/gold_v2/source_execution_evidence_v1.py'
+          spec = importlib.util.spec_from_file_location('source_execution_evidence_v1_runtime', script)
+          if spec is None or spec.loader is None:
+              raise SystemExit(97)
+          worker = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = worker
+          spec.loader.exec_module(worker)
+
+          dirty_after_import = worker.git(
+              runner,
+              'status',
+              '--porcelain=v1',
+              '--untracked-files=all',
+          )
+          if dirty_after_import:
+              raise worker.Gate(
+                  'RUNNER_DIRTY_AFTER_WORKER_IMPORT',
+                  dirty_after_import.splitlines(),
+              )
+
+          transport_name = "PRIVATE" + "_REPO" + "_PAT"
+          present = [transport_name] if os.environ.get(transport_name) else []
+          if present:
+              raise worker.Gate('TRANSPORT_CREDENTIAL_PRESENT_DURING_VALIDATION', present)
+
+          source = workspace / 'fresh-source'
+
+          def prechecked_source(root: Path, unused_secret: str) -> dict[str, object]:
+              worker.need(root.resolve() == source.resolve(), 'PRECHECKED_SOURCE_PATH_DRIFT')
+              observed = worker.git(root, 'rev-parse', 'HEAD')
+              worker.need(observed == worker.SOURCE_HEAD, 'SOURCE_CHECKOUT_HEAD_DRIFT', observed)
+              worker.need(worker.git(root, 'symbolic-ref', '-q', 'HEAD', check=False) == '', 'SOURCE_NOT_DETACHED')
+              worker.need(worker.git(root, 'status', '--porcelain=v1', '--untracked-files=all') == '', 'SOURCE_DIRTY_AFTER_CHECKOUT')
+              push_url = worker.git(root, 'remote', 'get-url', '--push', 'origin')
+              worker.need(push_url == 'DISABLED', 'SOURCE_REMOTE_PUSH_NOT_DISABLED', push_url)
+              return {
+                  'credential_environment_scrubbed_after_checkout': True,
+                  'fresh_detached_checkout': True,
+                  'source_head': observed,
+                  'source_remote_push_disabled': True,
+                  'source_tree': worker.git(root, 'rev-parse', 'HEAD^{tree}'),
+                  'transport_credential_scope': 'PRIVATE_SOURCE_FETCH_ONLY',
+                  'validators_received_transport_credential': False,
+              }
+
+          worker.token_names = lambda unused_env: [transport_name]
+          worker.token = lambda unused_env: (transport_name, '')
+          worker.verify_pr = lambda unused_secret: None
+          worker.clone_source = prechecked_source
+          worker.publish_status = lambda unused_secret, unused_run_id, unused_passed: (
+              False,
+              'PRIVATE_REPO_PAT_FETCH_ONLY_AND_NO_SOURCE_STATUS_CREDENTIAL',
+          )
+
+          code, receipt, archive_path = worker.execute(workspace, runner, os.environ)
+          dirty_after_execution = worker.git(
+              runner,
+              'status',
+              '--porcelain=v1',
+              '--untracked-files=all',
+          )
+          if dirty_after_execution:
+              raise worker.Gate(
+                  'RUNNER_DIRTY_AFTER_EVIDENCE_EXECUTION',
+                  dirty_after_execution.splitlines(),
+              )
+          print(json.dumps({
+              'archive': str(archive_path),
+              'blocker': receipt.get('blocker'),
+              'evidence_result': receipt.get('evidence_result'),
+              'secret_value_exposed': False,
+          }, sort_keys=True, separators=(',', ':')))
+          raise SystemExit(code)
+          PY
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload deterministic evidence archive
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gold-v2-source-execution-evidence-v1-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            ${{ steps.bootstrap.outputs.archive_path }}
+            ${{ steps.bootstrap.outputs.receipt_path }}
+
+      - name: Enforce evidence result
+        if: always()
+        shell: bash
+        env:
+          EVIDENCE_EXIT_CODE: ${{ steps.evidence.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          [[ "$EVIDENCE_EXIT_CODE" =~ ^[0-9]+$ ]] || exit 99
+          exit "$EVIDENCE_EXIT_CODE"
