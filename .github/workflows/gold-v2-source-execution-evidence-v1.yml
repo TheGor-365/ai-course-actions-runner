@@ -23,6 +23,74 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
+      - name: Bootstrap deterministic fail-closed evidence
+        id: bootstrap
+        shell: bash
+        env:
+          BOOTSTRAP_RUNNER_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          evidence="$workspace/evidence"
+          archive="$workspace/gold-v2-source-execution-evidence-v1.zip"
+          receipt="$evidence/machine_receipt.json"
+          rm -rf "$workspace"
+          mkdir -p "$evidence"
+          WORKSPACE="$workspace" BOOTSTRAP_RUNNER_HEAD="$BOOTSTRAP_RUNNER_HEAD" python3 - <<'PY'
+          # BOOTSTRAP_EVIDENCE_V1_START
+          from __future__ import annotations
+
+          import json
+          import os
+          import zipfile
+          from pathlib import Path
+
+          workspace = Path(os.environ["WORKSPACE"])
+          evidence = workspace / "evidence"
+          receipt_path = evidence / "machine_receipt.json"
+          archive_path = workspace / "gold-v2-source-execution-evidence-v1.zip"
+          receipt = {
+              "blocker": "BOOTSTRAP_PENDING",
+              "evidence_result": "REPAIR_REQUIRED",
+              "fresh_detached_checkout": False,
+              "independent_verifier_pass_claimed": False,
+              "media_render_started": False,
+              "no_fake_green": True,
+              "production_writes": 0,
+              "runner_head": os.environ.get("BOOTSTRAP_RUNNER_HEAD") or None,
+              "secret_value_exposed": False,
+              "source_head": "ab38ac36a786cdb93fc15263fadf391ce62368d5",
+              "source_writes": 0,
+              "workflow_repository": "TheGor-365/ai-course-actions-runner",
+          }
+          payload = (
+              json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+              + "\n"
+          ).encode("utf-8")
+          receipt_path.write_bytes(payload)
+          info = zipfile.ZipInfo("machine_receipt.json", (1980, 1, 1, 0, 0, 0))
+          info.compress_type = zipfile.ZIP_DEFLATED
+          info.create_system = 3
+          info.external_attr = 0o100644 << 16
+          with zipfile.ZipFile(
+              archive_path,
+              "w",
+              zipfile.ZIP_DEFLATED,
+              compresslevel=9,
+          ) as output:
+              output.writestr(
+                  info,
+                  payload,
+                  compress_type=zipfile.ZIP_DEFLATED,
+                  compresslevel=9,
+              )
+          # BOOTSTRAP_EVIDENCE_V1_END
+          PY
+          test -s "$receipt"
+          test -s "$archive"
+          echo "archive_path=$archive" >> "$GITHUB_OUTPUT"
+          echo "receipt_path=$receipt" >> "$GITHUB_OUTPUT"
+
       - name: Checkout exact runner commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -35,7 +103,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run bounded unit and static tests
+      - name: Run bounded unit and structural static tests
         shell: bash
         run: |
           set -euo pipefail
@@ -45,14 +113,29 @@ jobs:
             tests/gold_v2/test_source_execution_evidence_v1.py
           python3 -m unittest tests/gold_v2/test_source_execution_evidence_v1.py -v
           python3 - <<'PY'
+          import re
           from pathlib import Path
-          text = Path('.github/workflows/gold-v2-source-execution-evidence-v1.yml').read_text(encoding='utf-8')
-          assert 'PRIVATE_REPO_PAT' in text
-          assert 'GOLD_V2_SOURCE_READ_TOKEN' not in text
-          assert 'SOURCE_REPO_READ_TOKEN' not in text
-          assert 'REPO_READ_TOKEN' not in text
-          assert 'git remote set-url --push origin DISABLED' in text
-          assert 'PRIVATE_REPO_PAT_FETCH_ONLY' in text
+
+          text = Path(
+              ".github/workflows/gold-v2-source-execution-evidence-v1.yml"
+          ).read_text(encoding="utf-8")
+          marker = "sec" + "rets."
+          expected = "PRIVATE" + "_REPO" + "_PAT"
+          opening = "$" + "{" + "{"
+          closing = "}" + "}"
+          expression = re.compile(
+              re.escape(opening)
+              + r"\s*"
+              + re.escape(marker)
+              + r"([A-Z0-9_]+)\s*"
+              + re.escape(closing)
+          )
+          bindings = expression.findall(text)
+          assert bindings == [expected], bindings
+          assert "persist-credentials: false" in text
+          assert "git remote set-url --push origin DISABLED" in text
+          assert "steps.bootstrap.outputs.archive_path" in text
+          assert "steps.bootstrap.outputs.receipt_path" in text
           PY
 
       - name: Fetch exact private source head with transport-only credential
@@ -74,7 +157,7 @@ jobs:
           workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
           source="$workspace/fresh-source"
           evidence="$workspace/evidence"
-          rm -rf "$workspace"
+          rm -rf "$source"
           mkdir -p "$source" "$evidence"
 
           git -C "$source" init --quiet
@@ -94,6 +177,7 @@ jobs:
           }
 
           unset PRIVATE_REPO_PAT
+          [[ -z "${PRIVATE_REPO_PAT+x}" ]]
           git -C "$source" remote set-url --push origin DISABLED
           [[ "$(git -C "$source" remote get-url --push origin)" == "DISABLED" ]]
           ! grep -R -F -q 'x-access-token:' "$source/.git/config"
@@ -158,13 +242,8 @@ jobs:
           sys.modules[spec.name] = worker
           spec.loader.exec_module(worker)
 
-          forbidden = (
-              'PRIVATE_REPO_PAT',
-              'GOLD_V2_SOURCE_READ_TOKEN',
-              'SOURCE_REPO_READ_TOKEN',
-              'REPO_READ_TOKEN',
-          )
-          present = [name for name in forbidden if os.environ.get(name)]
+          transport_name = "PRIVATE" + "_REPO" + "_PAT"
+          present = [transport_name] if os.environ.get(transport_name) else []
           if present:
               raise worker.Gate('TRANSPORT_CREDENTIAL_PRESENT_DURING_VALIDATION', present)
 
@@ -188,8 +267,8 @@ jobs:
                   'validators_received_transport_credential': False,
               }
 
-          worker.token_names = lambda unused_env: ['PRIVATE_REPO_PAT']
-          worker.token = lambda unused_env: ('PRIVATE_REPO_PAT', '')
+          worker.token_names = lambda unused_env: [transport_name]
+          worker.token = lambda unused_env: (transport_name, '')
           worker.verify_pr = lambda unused_secret: None
           worker.clone_source = prechecked_source
           worker.publish_status = lambda unused_secret, unused_run_id, unused_passed: (
@@ -208,8 +287,6 @@ jobs:
           PY
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          echo "archive_path=$workspace/gold-v2-source-execution-evidence-v1.zip" >> "$GITHUB_OUTPUT"
-          echo "receipt_path=$workspace/evidence/machine_receipt.json" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Upload deterministic evidence archive
@@ -221,8 +298,8 @@ jobs:
           retention-days: 30
           compression-level: 0
           path: |
-            ${{ steps.evidence.outputs.archive_path }}
-            ${{ steps.evidence.outputs.receipt_path }}
+            ${{ steps.bootstrap.outputs.archive_path }}
+            ${{ steps.bootstrap.outputs.receipt_path }}
 
       - name: Enforce evidence result
         if: always()
