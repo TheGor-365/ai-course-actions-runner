@@ -145,6 +145,7 @@ jobs:
           SOURCE_REPOSITORY: TheGor-365/ai-course-source-library
           SOURCE_PR: "66"
           SOURCE_HEAD: ab38ac36a786cdb93fc15263fadf391ce62368d5
+          STACK_BASE_HEAD: 301bbfb48216060e84d1adcc3ac87ae67eb66a9f
         run: |
           set -euo pipefail
           [[ -n "$PRIVATE_REPO_PAT" ]] || {
@@ -167,7 +168,7 @@ jobs:
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0="url.https://x-access-token:${PRIVATE_REPO_PAT}@github.com/.insteadOf" \
           GIT_CONFIG_VALUE_0="https://github.com/" \
-            git -C "$source" fetch --no-tags --depth=1 origin "refs/pull/$SOURCE_PR/head"
+            git -C "$source" fetch --no-tags origin "refs/pull/$SOURCE_PR/head"
 
           git -C "$source" checkout --detach --quiet FETCH_HEAD
           observed_head="$(git -C "$source" rev-parse HEAD)"
@@ -175,6 +176,11 @@ jobs:
             echo "BLOCKER=SOURCE_PR_HEAD_DRIFT" >&2
             exit 2
           }
+          repository_is_shallow="$(git -C "$source" rev-parse --is-shallow-repository)"
+          [[ "$repository_is_shallow" == "false" ]]
+          git -C "$source" cat-file -e "${STACK_BASE_HEAD}^{commit}"
+          git -C "$source" merge-base --is-ancestor \
+            "$STACK_BASE_HEAD" "$SOURCE_HEAD"
 
           unset PRIVATE_REPO_PAT
           [[ -z "${PRIVATE_REPO_PAT+x}" ]]
@@ -184,7 +190,12 @@ jobs:
           [[ -z "$(git -C "$source" symbolic-ref -q HEAD || true)" ]]
           [[ -z "$(git -C "$source" status --porcelain=v1 --untracked-files=all)" ]]
 
-          SOURCE_ROOT="$source" EVIDENCE_ROOT="$evidence" SOURCE_HEAD="$SOURCE_HEAD" python3 - <<'PY'
+          SOURCE_ROOT="$source" \
+          EVIDENCE_ROOT="$evidence" \
+          SOURCE_HEAD="$SOURCE_HEAD" \
+          STACK_BASE_HEAD="$STACK_BASE_HEAD" \
+          REPOSITORY_IS_SHALLOW="$repository_is_shallow" \
+            python3 - <<'PY'
           import json
           import os
           import subprocess
@@ -198,14 +209,19 @@ jobs:
           ).strip()
           receipt = {
               'credential_environment_scrubbed_after_checkout': True,
+              'history_checkout_mode': 'FULL_REACHABLE_HISTORY',
               'private_source_fetch_completed': True,
               'remote_push_url': push_url,
               'remote_push_disabled': push_url == 'DISABLED',
+              'repository_is_shallow': os.environ['REPOSITORY_IS_SHALLOW'] == 'true',
               'secret_name': 'PRIVATE_REPO_PAT',
               'secret_value_exposed': False,
               'source_head': os.environ['SOURCE_HEAD'],
               'source_pr': 66,
               'source_repository': 'TheGor-365/ai-course-source-library',
+              'stack_base_head': os.environ['STACK_BASE_HEAD'],
+              'stack_base_is_ancestor': True,
+              'stack_base_object_present': True,
               'transport_credential_scope': 'PRIVATE_SOURCE_FETCH_ONLY',
               'validators_received_transport_credential': False,
           }
