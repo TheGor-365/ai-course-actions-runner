@@ -44,21 +44,168 @@ jobs:
             scripts/gold_v2/source_execution_evidence_v1.py \
             tests/gold_v2/test_source_execution_evidence_v1.py
           python3 -m unittest tests/gold_v2/test_source_execution_evidence_v1.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/gold-v2-source-execution-evidence-v1.yml').read_text(encoding='utf-8')
+          assert 'PRIVATE_REPO_PAT' in text
+          assert 'GOLD_V2_SOURCE_READ_TOKEN' not in text
+          assert 'SOURCE_REPO_READ_TOKEN' not in text
+          assert 'REPO_READ_TOKEN' not in text
+          assert 'git remote set-url --push origin DISABLED' in text
+          assert 'PRIVATE_REPO_PAT_FETCH_ONLY' in text
+          PY
 
-      - name: Execute exact-head source evidence
+      - name: Fetch exact private source head with transport-only credential
+        shell: bash
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          SOURCE_REPOSITORY: TheGor-365/ai-course-source-library
+          SOURCE_PR: "66"
+          SOURCE_HEAD: ab38ac36a786cdb93fc15263fadf391ce62368d5
+        run: |
+          set -euo pipefail
+          [[ -n "$PRIVATE_REPO_PAT" ]] || {
+            echo "BLOCKER=MISSING_READ_ONLY_PRIVATE_REPO_TOKEN" >&2
+            echo "SECRET_NAME=PRIVATE_REPO_PAT" >&2
+            echo "SECRET_VALUE_EXPOSED=false" >&2
+            exit 2
+          }
+
+          workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
+          source="$workspace/fresh-source"
+          evidence="$workspace/evidence"
+          rm -rf "$workspace"
+          mkdir -p "$source" "$evidence"
+
+          git -C "$source" init --quiet
+          git -C "$source" remote add origin "https://github.com/$SOURCE_REPOSITORY.git"
+
+          GIT_TERMINAL_PROMPT=0 \
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:${PRIVATE_REPO_PAT}@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/" \
+            git -C "$source" fetch --no-tags --depth=1 origin "refs/pull/$SOURCE_PR/head"
+
+          git -C "$source" checkout --detach --quiet FETCH_HEAD
+          observed_head="$(git -C "$source" rev-parse HEAD)"
+          [[ "$observed_head" == "$SOURCE_HEAD" ]] || {
+            echo "BLOCKER=SOURCE_PR_HEAD_DRIFT" >&2
+            exit 2
+          }
+
+          unset PRIVATE_REPO_PAT
+          git -C "$source" remote set-url --push origin DISABLED
+          [[ "$(git -C "$source" remote get-url --push origin)" == "DISABLED" ]]
+          ! grep -R -F -q 'x-access-token:' "$source/.git/config"
+          [[ -z "$(git -C "$source" symbolic-ref -q HEAD || true)" ]]
+          [[ -z "$(git -C "$source" status --porcelain=v1 --untracked-files=all)" ]]
+
+          SOURCE_ROOT="$source" EVIDENCE_ROOT="$evidence" SOURCE_HEAD="$SOURCE_HEAD" python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          source = Path(os.environ['SOURCE_ROOT'])
+          evidence = Path(os.environ['EVIDENCE_ROOT'])
+          push_url = subprocess.check_output(
+              ['git', '-C', str(source), 'remote', 'get-url', '--push', 'origin'],
+              text=True,
+          ).strip()
+          receipt = {
+              'credential_environment_scrubbed_after_checkout': True,
+              'private_source_fetch_completed': True,
+              'remote_push_url': push_url,
+              'remote_push_disabled': push_url == 'DISABLED',
+              'secret_name': 'PRIVATE_REPO_PAT',
+              'secret_value_exposed': False,
+              'source_head': os.environ['SOURCE_HEAD'],
+              'source_pr': 66,
+              'source_repository': 'TheGor-365/ai-course-source-library',
+              'transport_credential_scope': 'PRIVATE_SOURCE_FETCH_ONLY',
+              'validators_received_transport_credential': False,
+          }
+          (evidence / 'private_source_fetch_receipt.json').write_text(
+              json.dumps(receipt, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Execute exact-head source evidence without transport credential
         id: evidence
         shell: bash
         env:
-          GOLD_V2_SOURCE_READ_TOKEN: ${{ secrets.GOLD_V2_SOURCE_READ_TOKEN }}
-          SOURCE_REPO_READ_TOKEN: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          REPO_READ_TOKEN: ${{ secrets.REPO_READ_TOKEN }}
           ACTIONS_READ_TOKEN: ${{ github.token }}
         run: |
           set +e
           workspace="$RUNNER_TEMP/gold-v2-source-execution-evidence-v1"
-          python3 scripts/gold_v2/source_execution_evidence_v1.py \
-            --runner-repo "$GITHUB_WORKSPACE" \
-            --workspace "$workspace"
+          WORKSPACE="$workspace" python3 - <<'PY'
+          from __future__ import annotations
+
+          import importlib.util
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          workspace = Path(os.environ['WORKSPACE']).resolve()
+          runner = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          script = runner / 'scripts/gold_v2/source_execution_evidence_v1.py'
+          spec = importlib.util.spec_from_file_location('source_execution_evidence_v1_runtime', script)
+          if spec is None or spec.loader is None:
+              raise SystemExit(97)
+          worker = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = worker
+          spec.loader.exec_module(worker)
+
+          forbidden = (
+              'PRIVATE_REPO_PAT',
+              'GOLD_V2_SOURCE_READ_TOKEN',
+              'SOURCE_REPO_READ_TOKEN',
+              'REPO_READ_TOKEN',
+          )
+          present = [name for name in forbidden if os.environ.get(name)]
+          if present:
+              raise worker.Gate('TRANSPORT_CREDENTIAL_PRESENT_DURING_VALIDATION', present)
+
+          source = workspace / 'fresh-source'
+
+          def prechecked_source(root: Path, unused_secret: str) -> dict[str, object]:
+              worker.need(root.resolve() == source.resolve(), 'PRECHECKED_SOURCE_PATH_DRIFT')
+              observed = worker.git(root, 'rev-parse', 'HEAD')
+              worker.need(observed == worker.SOURCE_HEAD, 'SOURCE_CHECKOUT_HEAD_DRIFT', observed)
+              worker.need(worker.git(root, 'symbolic-ref', '-q', 'HEAD', check=False) == '', 'SOURCE_NOT_DETACHED')
+              worker.need(worker.git(root, 'status', '--porcelain=v1', '--untracked-files=all') == '', 'SOURCE_DIRTY_AFTER_CHECKOUT')
+              push_url = worker.git(root, 'remote', 'get-url', '--push', 'origin')
+              worker.need(push_url == 'DISABLED', 'SOURCE_REMOTE_PUSH_NOT_DISABLED', push_url)
+              return {
+                  'credential_environment_scrubbed_after_checkout': True,
+                  'fresh_detached_checkout': True,
+                  'source_head': observed,
+                  'source_remote_push_disabled': True,
+                  'source_tree': worker.git(root, 'rev-parse', 'HEAD^{tree}'),
+                  'transport_credential_scope': 'PRIVATE_SOURCE_FETCH_ONLY',
+                  'validators_received_transport_credential': False,
+              }
+
+          worker.token_names = lambda unused_env: ['PRIVATE_REPO_PAT']
+          worker.token = lambda unused_env: ('PRIVATE_REPO_PAT', '')
+          worker.verify_pr = lambda unused_secret: None
+          worker.clone_source = prechecked_source
+          worker.publish_status = lambda unused_secret, unused_run_id, unused_passed: (
+              False,
+              'PRIVATE_REPO_PAT_FETCH_ONLY_AND_NO_SOURCE_STATUS_CREDENTIAL',
+          )
+
+          code, receipt, archive_path = worker.execute(workspace, runner, os.environ)
+          print(json.dumps({
+              'archive': str(archive_path),
+              'blocker': receipt.get('blocker'),
+              'evidence_result': receipt.get('evidence_result'),
+              'secret_value_exposed': False,
+          }, sort_keys=True, separators=(',', ':')))
+          raise SystemExit(code)
+          PY
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           echo "archive_path=$workspace/gold-v2-source-execution-evidence-v1.zip" >> "$GITHUB_OUTPUT"
