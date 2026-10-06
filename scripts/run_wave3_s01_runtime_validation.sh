@@ -12,6 +12,9 @@ TEMPORAL_CONTAINER="ai-course-w1f04-temporal"
 TEMPORAL_IMAGE="temporalio/temporal:1.8.1"
 TEMPORAL_ADDRESS="127.0.0.1:7233"
 VALIDATOR_PATH="04_validators/factory_orchestration/wave3_s01/run_wave3_repair_owner_gate.py"
+PRODUCTION_DIR="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}/_production_checkout"
+WORK_ROOT="${RUNNER_TEMP:-/tmp}/wave3_s01_runtime_validation"
+VENV_DIR="$WORK_ROOT/venv"
 
 fail() {
   echo "result=FAIL"
@@ -20,15 +23,16 @@ fail() {
   exit "${3:-1}"
 }
 
+phase() {
+  echo "PHASE=$1"
+}
+
 cleanup() {
   docker rm -f "$TEMPORAL_CONTAINER" >/dev/null 2>&1 || true
   docker rm -f "$POSTGRES_CONTAINER" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-if [[ -z "${PRIVATE_REPO_PAT:-}" ]]; then
-  fail policy missing_private_repo_credential 2
-fi
 if [[ ! "$PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   fail policy invalid_bound_production_sha 2
 fi
@@ -36,38 +40,40 @@ command -v git >/dev/null || fail runtime git_missing 2
 command -v docker >/dev/null || fail runtime docker_missing 2
 command -v python3 >/dev/null || fail runtime python3_missing 2
 
-WORK_ROOT="${RUNNER_TEMP:-/tmp}/wave3_s01_runtime_validation"
-PRODUCTION_DIR="$WORK_ROOT/production"
-VENV_DIR="$WORK_ROOT/venv"
-rm -rf "$WORK_ROOT"
-mkdir -p "$WORK_ROOT"
-
-git config --global advice.detachedHead false
-git clone --filter=blob:none --no-checkout \
-  "https://x-access-token:${PRIVATE_REPO_PAT}@github.com/${PRODUCTION_REPO}.git" \
-  "$PRODUCTION_DIR" >/dev/null 2>&1
-cd "$PRODUCTION_DIR"
-git fetch --depth=1 origin \
-  "refs/heads/${PRODUCTION_BRANCH}:refs/remotes/origin/${PRODUCTION_BRANCH}" \
-  >/dev/null 2>&1
-BRANCH_SHA="$(git rev-parse "refs/remotes/origin/${PRODUCTION_BRANCH}")"
-if [[ "$BRANCH_SHA" != "$PRODUCTION_SHA" ]]; then
-  echo "expected_production_sha=$PRODUCTION_SHA"
-  echo "observed_branch_sha=$BRANCH_SHA"
-  fail authority branch_head_sha_mismatch 2
+phase AUTHORITY_CHECK
+if [[ ! -d "$PRODUCTION_DIR/.git" ]]; then
+  fail infrastructure production_checkout_missing 2
 fi
-git checkout --detach "$PRODUCTION_SHA" >/dev/null 2>&1
+cd "$PRODUCTION_DIR"
 CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-[[ "$CHECKED_OUT_SHA" == "$PRODUCTION_SHA" ]] || fail authority detached_checkout_sha_mismatch 2
+if [[ "$CHECKED_OUT_SHA" != "$PRODUCTION_SHA" ]]; then
+  echo "expected_production_sha=$PRODUCTION_SHA"
+  echo "observed_local_head=$CHECKED_OUT_SHA"
+  fail authority local_head_sha_mismatch 2
+fi
+if ! REMOTE_BRANCH_LINE="$(git ls-remote --exit-code origin "refs/heads/${PRODUCTION_BRANCH}")"; then
+  fail infrastructure production_remote_branch_lookup_failed 2
+fi
+REMOTE_BRANCH_SHA="$(awk 'NR==1 {print $1}' <<<"$REMOTE_BRANCH_LINE")"
+if [[ -z "$REMOTE_BRANCH_SHA" ]]; then
+  fail infrastructure production_remote_branch_lookup_empty 2
+fi
+if [[ "$REMOTE_BRANCH_SHA" != "$PRODUCTION_SHA" ]]; then
+  echo "expected_production_sha=$PRODUCTION_SHA"
+  echo "observed_remote_branch_sha=$REMOTE_BRANCH_SHA"
+  fail authority remote_branch_head_sha_mismatch 2
+fi
 [[ -f "$VALIDATOR_PATH" ]] || fail authority wave3_validator_missing 2
 
 echo "production_repo=$PRODUCTION_REPO"
 echo "production_branch=$PRODUCTION_BRANCH"
 echo "production_sha=$PRODUCTION_SHA"
-echo "production_branch_head_verified=true"
+echo "production_local_head_verified=true"
+echo "production_remote_branch_head_verified=true"
 echo "validator_path=$VALIDATOR_PATH"
 echo "production_validator_modified=false"
 
+phase PYTHON_ENV
 sudo apt-get update -y >/dev/null
 sudo apt-get install -y postgresql-client-16 python3-venv >/dev/null
 python3 -m venv "$VENV_DIR"
@@ -90,6 +96,7 @@ for package, version in expected.items():
 print("python_dependency_versions=PASS")
 PY
 
+phase POSTGRES_START
 docker rm -f "$POSTGRES_CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$POSTGRES_CONTAINER" \
   -e POSTGRES_USER=postgres \
@@ -118,6 +125,7 @@ POSTGRES_VERSION="$(psql -X -Atc 'SHOW server_version;' "$W1F04_DB")"
 echo "postgres_version=$POSTGRES_VERSION"
 echo "postgres_database=$W1F04_DB"
 
+phase TEMPORAL_START
 docker rm -f "$TEMPORAL_CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$TEMPORAL_CONTAINER" \
   -p 7233:7233 \
@@ -143,5 +151,6 @@ export W1F04_TEMPORAL_ADDRESS="$TEMPORAL_ADDRESS"
 export W1F04_TEMPORAL_CONTAINER="$TEMPORAL_CONTAINER"
 export PYTHONPATH="$PRODUCTION_DIR/11_tools"
 
+phase WAVE3_RUNTIME_GATE
 cd "$PRODUCTION_DIR"
 python "$VALIDATOR_PATH"
