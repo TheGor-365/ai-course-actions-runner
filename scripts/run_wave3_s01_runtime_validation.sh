@@ -3,7 +3,7 @@ set -euo pipefail
 
 PRODUCTION_REPO="TheGor-365/ai-course-production-system"
 PRODUCTION_BRANCH="integration/gold2-wave3-s01-product-v1"
-PRODUCTION_SHA="803a9278215402a9b4ebd4f243ba8b2b62f4e87b"
+PRODUCTION_SHA="9fbf83c6bf8c05f53b62acf2f55b98e46c73c537"
 W1F04_DB="ai_course_factory_w1f04"
 POSTGRES_CONTAINER="ai-course-w1f04-postgres"
 POSTGRES_IMAGE="postgres:16.11"
