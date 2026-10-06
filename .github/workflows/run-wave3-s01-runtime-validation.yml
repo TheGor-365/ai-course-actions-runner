@@ -1,0 +1,28 @@
+name: Wave 3 S01 Runtime Validation
+
+run-name: wave3-s01-runtime-validation @ 803a9278215402a9b4ebd4f243ba8b2b62f4e87b
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  wave3-runtime-validation:
+    name: Validate exact Wave-3 integration runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+
+    steps:
+      - name: Checkout runner branch
+        uses: actions/checkout@v4
+
+      - name: Execute exact-bound Wave-3 runtime gate
+        run: bash scripts/run_wave3_s01_runtime_validation.sh
