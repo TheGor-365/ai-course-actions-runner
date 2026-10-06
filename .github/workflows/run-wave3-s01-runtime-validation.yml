@@ -17,12 +17,20 @@ jobs:
     name: Validate exact Wave-3 integration runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
 
     steps:
       - name: Checkout runner branch
         uses: actions/checkout@v4
+
+      - name: Checkout exact-bound production branch
+        uses: actions/checkout@v4
+        with:
+          repository: TheGor-365/ai-course-production-system
+          ref: integration/gold2-wave3-s01-product-v1
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+          path: _production_checkout
+          fetch-depth: 1
+          persist-credentials: true
 
       - name: Execute exact-bound Wave-3 runtime gate
         run: bash scripts/run_wave3_s01_runtime_validation.sh
