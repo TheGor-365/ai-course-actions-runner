@@ -2,68 +2,78 @@
 
 ```text
 DOCUMENT_ID=AI_COURSE_ACTIONS_RUNNER_README
-STATUS=ACTIVE_EXECUTION_PLANE_THREE_REPO_FACTORY_A3502_SYNC
+STATUS=ACTIVE_EXECUTION_PLANE_WITH_OC_V33_PRECEDENCE
 FACTORY_ID=AI_COURSE_FACTORY
 ROLE=execution_only_public_github_actions_layer
+MANDATORY_FIRST_READ=TheGor-365/ai-course-production-system:00_control/FACTORY_OPERATION_CENTER.md
+CURRENT_OC_DOCUMENT_ID=FACTORY_OPERATION_CENTER_v33
+WORKER_MUST_REPORT_OC_BLOB_SHA=true
+CONFLICT_SEARCH_REQUIRED=true
+MEMORY_CANNOT_OVERRIDE_LIVE_OC=true
 NO_FAKE_GREEN=true
 ```
 
-This repository is one of the three repositories that make up the AI course factory:
+This repository is the public execution-only machine shop for the three-repository AI course factory. It is not content, production-state, promotion or release authority.
+
+## Mandatory entry
 
 ```text
-PRODUCTION_CONTROL_REPO=TheGor-365/ai-course-production-system
-SOURCE_LIBRARY_REPO=TheGor-365/ai-course-source-library
-EXECUTION_RUNNER_REPO=TheGor-365/ai-course-actions-runner
+RUNNER_ENTRYPOINT=00_control/FACTORY_OC_ENTRYPOINT_v33.md
+SOURCE_AUTHORITY_REPO=TheGor-365/ai-course-source-library
+PRODUCTION_AUTHORITY_REPO=TheGor-365/ai-course-production-system
+EXECUTION_REPO=TheGor-365/ai-course-actions-runner
+EXECUTION_LAYER=PUBLIC_GITHUB_HOSTED_RUNNER
 ```
 
-## Authority
-
-The runner executes allowlisted jobs and returns evidence. It is not the source of truth for course content, factory state, production promotion or release readiness.
+## Current execution and artifact authority
 
 ```text
-PUBLIC_RUNNER_REPO_IS_EXECUTION_ONLY=true
-CURRENT_STATE_AUTHORITY=TheGor-365/ai-course-production-system
-SOURCE_AND_GOLD_AUTHORITY=TheGor-365/ai-course-source-library
-RUNNER_AUTHORITY=execution_evidence_bound_to_exact_private_SHA
-INDEPENDENT_PRODUCTION_GREEN_AUTHORITY=false
+PUBLIC_RUNNER_IS_PRIMARY=true
+PRIVATE_RUNNER_REQUIRED=false
+SELF_HOSTED_RUNNER_REQUIRED=false
+LOCKED_PRIVATE_LINUX_HOST_REQUIRED=false
+PRIVATE_ACTIONS_GREEN=false
+PUBLIC_RUNNER_AUDIO_RENDER_ALLOWED=true
+PUBLIC_RUNNER_VIDEO_RENDER_ALLOWED=true
+PUBLIC_RUNNER_STILL_RENDER_ALLOWED=true
+PUBLIC_ACTIONS_ARTIFACT_UPLOAD_ALLOWED=true
+PUBLIC_AUDIO_ARTIFACT_ALLOWED=true
+PUBLIC_VIDEO_ARTIFACT_ALLOWED=true
+PUBLIC_STILL_ARTIFACT_ALLOWED=true
+MEDIA_BINARIES_IN_GIT_COMMITS=false
 ```
 
-## Safety
+The current public-artifact allowance is bounded by the live production OC. Private repository archives, secrets, raw provider payloads and unsanitized private content remain forbidden.
+
+## Safety invariants
 
 ```text
 NO_PRIVATE_CONTENT_IN_PUBLIC_LOGS=true
 NO_PRIVATE_REPO_ARCHIVE_IN_PUBLIC_ARTIFACTS=true
-NO_PUBLIC_AUDIO_ARTIFACTS_BY_DEFAULT=true
-NO_PUBLIC_VIDEO_ARTIFACTS_BY_DEFAULT=true
 NO_SECRET_PRINTING=true
-ALLOWLISTED_GATES_ONLY=true
 NO_ARBITRARY_SHELL_INPUT=true
+ALLOWLISTED_GATES_ONLY=true
 EVERY_RUN_BINDS_TO_PRIVATE_SHA=true
 EVERY_GREEN_HAS_EVIDENCE=true
-PUBLIC_RUNNER_ARTIFACTS_DEFAULT=none
-AUDIO_RENDER_IN_PUBLIC_RUNNER_ALLOWED=false
-VIDEO_RENDER_IN_PUBLIC_RUNNER_ALLOWED=false
+RUNNER_CAN_PROMOTE_PRODUCTION=false
+FINAL_HUMAN_VIDEO_ACCEPTANCE_REQUIRED=true
 ```
 
-## Current capability reality
+The existing `PRIVATE_REPO_PAT` is already installed and proven. Do not recreate or rotate it without an observed authentication failure.
+
+## Legacy routing
+
+The former A3502-only public-media prohibition, `private_locked_Linux_host` execution path and private/self-hosted runner requirement are historical snapshots only.
 
 ```text
-CURRENT_ALLOWLIST_MAX_STAGE=A3480_TEXT_ONLY
-CURRENT_PRODUCTION_STAGE=A3502_STILL_FRAME_QC_GATE_NO_FULL_RENDER
-CURRENT_A3502_GATE_IMPLEMENTED_IN_RUNNER=false
-CURRENT_A3502_EXECUTION_PATH=private_locked_Linux_host
-RUNNER_IS_REQUIRED_FOR_FUTURE_AUTOMATION=true
-RUNNER_IS_NOT_CURRENT_A3502_RENDER_HOST=true
+HISTORICAL_A3502_POLICY=LEGACY_SUPERSEDED
+SUPERSEDED_BY=TheGor-365/ai-course-production-system:00_control/FACTORY_OPERATION_CENTER.md
 ```
-
-The current A3502 worker depends on exact Linux runtime/font/codec locks, a private artifact store, local browser availability and installed Remotion dependencies. It must not be moved into this public runner until a sanitized, reproducible and explicitly allowlisted gate is designed and proven.
 
 ## Canonical documents
 
 ```text
 RUNNER_CENTER_CONTRACT=00_contracts/PUBLIC_RUNNER_CENTER_CONTRACT_v01.md
-DISPATCH_RUNBOOK=docs/PUBLIC_RUNNER_DISPATCH_RUNBOOK_v01.md
-AUTOMATION_BACKLOG=docs/FACTORY_RUNNER_AUTOMATION_BACKLOG_v01.md
+RUNNER_ENTRYPOINT=00_control/FACTORY_OC_ENTRYPOINT_v33.md
 CANONICAL_FACTORY_OC=TheGor-365/ai-course-production-system:00_control/FACTORY_OPERATION_CENTER.md
-CANONICAL_FACTORY_PROCESS_MAP=TheGor-365/ai-course-production-system:00_control/FACTORY_AUTOMATION_PROCESS_MAP_v01.md
 ```
